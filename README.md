@@ -7,7 +7,7 @@ La interfaz es responsive, tiene tema oscuro por defecto y puede instalarse como
 ## Sitio en Sites
 
 - **URL publicada:** [Task eXperience](https://task-experience.hyper-xaa.chatgpt.site/).
-- **Acceso actual:** privado; solo la cuenta propietaria puede abrirlo. Compartir el Site con otras personas se gestiona en Sites. Sus permisos de acceso son independientes de la contraseña familiar y las combinaciones de animales de la aplicación.
+- **Acceso actual:** público en Sites; cualquiera con el enlace puede abrir la pantalla inicial. Para acceder a los perfiles siguen haciendo falta la contraseña familiar y la combinación de animales correspondiente. La visibilidad del Site se gestiona en Sites y es independiente del acceso interno de la aplicación.
 - **Datos:** el Site usa su propia base Cloudflare D1, declarada como `DB` en [`.openai/hosting.json`](.openai/hosting.json). La base publicada se creó vacía: los Xp, tareas e historial del entorno local **no se migraron ni se sincronizan automáticamente**. La aplicación permite exportar datos a JSON desde un perfil parental, pero todavía no dispone de importación.
 - **Primer acceso:** el propietario crea una contraseña familiar y utiliza el código de configuración del alojamiento. Este código está guardado como secreto `TASK_XP_SETUP_TOKEN` en Sites; no debe añadirse al repositorio. Las combinaciones iniciales de cuatro animales se muestran una sola vez, por lo que hay que guardarlas.
 
