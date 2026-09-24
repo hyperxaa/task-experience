@@ -20,6 +20,20 @@ El navegador abre la URL pública en `mark`. nginx termina HTTPS y reenvía la p
 
 El servidor standalone escucha en `HOST:PORT`; `scripts/start.mjs` transmite estos valores a Next.js. `PUBLIC_ORIGIN` debe coincidir con la URL HTTPS que usa el navegador: sirve para comprobar `Origin` en operaciones de escritura y para marcar las cookies como `Secure`. `TASK_XP_TRUST_PROXY=true` hace que el limitador de intentos use `X-Real-IP`, sobrescrito por nginx.
 
+## Misiones y bonus semanales
+
+El catálogo inicial incluye las tareas de ambas niñas. Hacer la cama y prepararse a tiempo dan 1 Xp al día cada una; mantener la habitación ordenada por la noche da 5 Xp; lavarse los dientes da 2 Xp por registro, hasta dos veces al día. Kids&Us Homework da 5 Xp de lunes a viernes. Siguen activas organizar el día (5 Xp diarios), la rutina de ducha (10 Xp diarios) y elegir la ropa de mañana (5 Xp diarios). La mochila del cole da 5 Xp de domingo a jueves. «Recoger mi ropa» se ha retirado.
+
+Iara prepara la mesa para cenar de lunes a viernes (2 Xp), prepara la mochila extraescolar domingo, lunes y martes (5 Xp) y tiene el objetivo semanal de responsabilizarse de los deberes del cole (10 Xp). Aina recoge la mesa de la cena de lunes a viernes (2 Xp), prepara la mochila extraescolar lunes, martes y miércoles (5 Xp) y tiene el objetivo semanal de probar un alimento nuevo (10 Xp). Los objetivos semanales se registran una vez por semana; las tareas y objetivos se pueden editar desde la gestión parental.
+
+La semana de bonus va de **lunes a domingo**, con fechas de `Europe/Madrid`. El servidor conserva una copia de las tareas programadas para esa semana; las ediciones de tareas cuentan para bonus desde la semana siguiente. La primera semana empieza a contar desde el primer acceso autenticado, aunque sea a mitad de semana. Al terminar el domingo, por cada tarea completada todos sus días asignados y todas sus repeticiones se concede un bonus igual a sus Xp de esa semana (**x2 en total**). Si se han completado **todas** las tareas programadas de la niña, se concede un único superbonus de cuatro veces los Xp base (**x5 en total**) y se sustituyen los bonus x2. Las pausas programadas quitan los días afectados de los requisitos; una semana sin ninguna tarea exigible no concede bonus. Las tareas de una sola vez y los huevos de Pascua no entran en el multiplicador. Las correcciones posteriores recalculan el bonus y el saldo.
+
+El bonus se calcula en la primera petición después del cierre semanal y se anota en el domingo que acaba de pasar. El calendario marca en **plateado** los días de tareas que obtuvieron x2 y en **dorado** la semana con x5. El historial muestra el extra de Xp por separado. Los bonus son parte del saldo y de los niveles.
+
+Con todas las tareas iniciales hechas, cada niña puede obtener **302 Xp base** por semana y **1510 Xp con el superbonus x5**. El cálculo es: 267 Xp de tareas comunes, 10 Xp de su tarea de la cena, 15 Xp de mochila extraescolar y 10 Xp de su objetivo semanal. Los huevos de Pascua quedan fuera de este máximo.
+
+El **Super objetivo** inicial, «Traer una amiga a dormir el fin de semana», se desbloquea para cada niña al conseguir su superbonus. Puede solicitarlo una vez por semana premiada, sin gastar los Xp ganados; un adulto confirma la fecha. Una cancelación libera el derecho de esa semana. La familia puede editar o archivar el premio desde la gestión parental.
+
 ## Requisitos
 
 - Node.js 22.13+ y npm en la máquina ARM64 que compilará y ejecutará la app.

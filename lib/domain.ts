@@ -1,17 +1,18 @@
 import { settleCycles, nextClose, cycleSummary, madridInstant, type Cycle, type CycleRule } from './cycles.ts';
+import { settleWeeklyBonuses, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
 export type Lang = 'es' | 'ca' | 'en';
 export type Child = 'aina' | 'iara';
 export type Person = Child | 'xavi' | 'mireia';
 export type Status = 'pending' | 'changes' | 'approved' | 'archived';
 export type Words = { es: string; ca: string; en: string };
-export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; status: Status; author: Person; note: string; icon: string; created: string };
-export type Reward = { id: string; title: string | Words; description: string | Words; xp: number; children: Child[]; status: Status; author: Person; note: string; icon: string; limit: number; created: string };
+export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; cadence?: 'daily' | 'weekly'; status: Status; author: Person; note: string; icon: string; created: string };
+export type Reward = { id: string; title: string | Words; description: string | Words; xp: number; requiresSuperBonus?: boolean; children: Child[]; status: Status; author: Person; note: string; icon: string; limit: number; created: string };
 export type Adjustment = { id: string; at: string; actor: Person; from: number; to: number; reason: string; undoneBy?: string; undoOf?: string };
 export type Completion = { id: string; taskId: string; child: Child; title: string | Words; xp: number; day: string; at: string; actor: Person; reversed: boolean; reason?: string; correctedBy?: Person; originalXP?: number; icon?: string; category?: Task['category']; effectiveAt?: string; adjustments?: Adjustment[] };
-export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
+export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
-export type State = { version: 1; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
+export type State = { version: 1; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
 export type Action = { type: string; requestId: string; [key: string]: unknown };
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
@@ -22,28 +23,47 @@ export function shiftDay(day: string, n: number) { const d = new Date(day + 'T12
 export function weekBeginning(day: string, start = 5) { const n = new Date(day + 'T12:00:00Z').getUTCDay(); return shiftDay(day, -((n - start + 7) % 7)); }
 export function totals(s: State, child: Child, today = dateInMadrid()) {
   const valid = s.completions.filter(x => x.child === child && !x.reversed);
-  const xp = valid.reduce((v, x) => v + x.xp, 0);
+  const bonuses = s.weeklyBonuses?.filter(x => x.child === child) ?? [];
+  const xp = valid.reduce((v, x) => v + x.xp, 0) + bonuses.reduce((v, x) => v + x.xp, 0);
   const spent = s.redemptions.filter(x => x.child === child && x.status !== 'cancelled').reduce((v, x) => v + x.xp, 0);
   const cycle = s.cycles?.at(-1), week = weekBeginning(today, s.weekStart);
-  return { xp, balance: xp - spent, today: valid.filter(x => x.day === today).reduce((v, x) => v + x.xp, 0), week: cycle ? cycleSummary(s,cycle,child).xp : valid.filter(x => x.day >= week && x.day <= today).reduce((v, x) => v + x.xp, 0), month: valid.filter(x => x.day.slice(0,7) === today.slice(0,7)).reduce((v,x) => v+x.xp,0), level: Math.floor(xp / 250) + 1, levelProgress: xp % 250 };
+  return { xp, balance: xp - spent, today: valid.filter(x => x.day === today).reduce((v, x) => v + x.xp, 0) + bonuses.filter(x => dateInMadrid(new Date(x.at)) === today).reduce((v,x)=>v+x.xp,0), week: cycle ? cycleSummary(s,cycle,child).xp : valid.filter(x => x.day >= week && x.day <= today).reduce((v, x) => v + x.xp, 0) + bonuses.filter(x => dateInMadrid(new Date(x.at)) >= week && dateInMadrid(new Date(x.at)) <= today).reduce((v,x)=>v+x.xp,0), month: valid.filter(x => x.day.slice(0,7) === today.slice(0,7)).reduce((v,x) => v+x.xp,0) + bonuses.filter(x => dateInMadrid(new Date(x.at)).slice(0,7) === today.slice(0,7)).reduce((v,x)=>v+x.xp,0), level: Math.floor(xp / 250) + 1, levelProgress: xp % 250 };
 }
-export function due(t: Task, child: Child, day: string, s: State) { return t.status === 'approved' && t.children.includes(child) && (t.once || t.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (!t.once || !s.completions.some(c => c.taskId === t.id && c.child === child && !c.reversed)); }
-export function completed(s: State, t: Task, child: Child, day: string) { return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (t.once || c.day === day)).length; }
+export function availableSuperBonus(s: State, child: Child, rewardId: string) {
+  return s.weeklyBonuses?.filter(bonus => bonus.child === child && bonus.kind === 'super')
+    .sort((a,b) => b.week.localeCompare(a.week))
+    .find(bonus => !s.redemptions.some(redemption => redemption.child === child && redemption.rewardId === rewardId && redemption.bonusWeek === bonus.week && redemption.status !== 'cancelled'));
+}
+export function due(t: Task, child: Child, day: string, s: State) { return t.status === 'approved' && t.children.includes(child) && (t.once || t.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (t.once ? !s.completions.some(c => c.taskId === t.id && c.child === child && !c.reversed) : t.cadence === 'weekly' ? completed(s,t,child,day) < t.limit : true); }
+export function completed(s: State, t: Task, child: Child, day: string) { const week=t.cadence==='weekly'?weekBeginning(day,1):null; return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (t.once || (week ? c.day>=week&&c.day<=shiftDay(week,6) : c.day === day))).length; }
 const w = (es: string, ca: string, en: string): Words => ({ es, ca, en });
 export function initialState(now = new Date().toISOString()): State {
   const base = { children: ['aina', 'iara'] as Child[], days: [0,1,2,3,4,5,6], once: false, limit: 1, status: 'approved' as Status, author: 'xavi' as Person, note: '', created: now };
-  const specs: [string, Words, Words, number, Task['category'], string][] = [
-    ['bed',w('Hacer mi cama','Fer el meu llit','Make my bed'),w('Estirar las sábanas y colocar la almohada.','Estirar els llençols i posar el coixí.','Straighten the covers and place the pillow.'),5,'morning','bed'],
-    ['dress',w('Prepararme a tiempo','Preparar-me a temps','Get ready on time'),w('Vestirme antes de la hora que hemos acordado.','Vestir-me abans de l’hora que hem acordat.','Get dressed by our agreed time.'),5,'morning','shirt'],
-    ['room',w('Mi habitación, en orden','La meva habitació, endreçada','A tidy room'),w('Ropa en su sitio, suelo despejado y escritorio listo.','Roba al seu lloc, terra lliure i escriptori a punt.','Clothes put away, clear floor and tidy desk.'),10,'all-day','sparkles'],
-    ['table',w('Ayudar con la mesa','Ajudar amb la taula','Help set the table'),w('Preparar la mesa para compartir la comida.','Preparar la taula per compartir l’àpat.','Get the table ready for our meal.'),5,'afternoon','utensils'],
-    ['laundry',w('Recoger mi ropa','Recollir la meva roba','Put my clothes away'),w('Doblar y guardar la ropa que está lista.','Plegar i desar la roba que està a punt.','Fold and put away the clean clothes.'),5,'all-day','shirt'],
-    ['plan',w('Organizar mi día','Organitzar el meu dia','Plan my day'),w('Revisar mi lista y elegir por dónde empezar.','Revisar la meva llista i triar per on començar.','Check my list and choose where to start.'),5,'morning','list'],
-    ['shower',w('Mi rutina de ducha','La meva rutina de dutxa','My shower routine'),w('Seguir los pasos de higiene que hemos aprendido. Pedir ayuda está bien.','Seguir els passos d’higiene que hem après. Demanar ajuda està bé.','Follow the hygiene steps we have learned. It is okay to ask for help.'),10,'evening','shower'],
-    ['bag',w('Mochila preparada','Motxilla preparada','Pack my bag'),w('Revisar lo que necesito para mañana.','Revisar què necessito per demà.','Check what I need for tomorrow.'),5,'evening','backpack'],
-    ['clothes',w('Elegir la ropa de mañana','Triar la roba de demà','Choose tomorrow’s clothes'),w('Dejar la ropa lista para empezar con calma.','Deixar la roba a punt per començar amb calma.','Lay out my clothes for a calm start.'),5,'evening','shirt'],
+  const daily = (id:string,title:Words,description:Words,xp:number,category:Task['category'],icon:string,options:Partial<Task> = {}): Task => ({...base,id,title,description,xp,category,icon,...options});
+  const specs: Task[] = [
+    daily('bed',w('Hacer mi cama','Fer el meu llit','Make my bed'),w('Estirar las sábanas y colocar la almohada.','Estirar els llençols i posar el coixí.','Straighten the covers and place the pillow.'),1,'morning','bed'),
+    daily('dress',w('Prepararme a tiempo','Preparar-me a temps','Get ready on time'),w('Vestirme antes de la hora que hemos acordado.','Vestir-me abans de l’hora que hem acordat.','Get dressed by our agreed time.'),1,'morning','shirt'),
+    daily('room',w('Mi habitación, en orden','La meva habitació, endreçada','A tidy room'),w('Mantener la habitación recogida al terminar el día.','Mantenir l’habitació endreçada en acabar el dia.','Keep my room tidy by the end of the day.'),5,'evening','sparkles'),
+    daily('table',w('Preparar la mesa para cenar','Parar taula per sopar','Set the table for dinner'),w('Dejar la mesa lista para la cena.','Deixar la taula preparada per sopar.','Get the table ready for dinner.'),2,'evening','utensils',{children:['iara'],days:[1,2,3,4,5]}),
+    daily('clear-table',w('Recoger la mesa de la cena','Desparar taula després de sopar','Clear the dinner table'),w('Recoger la mesa después de cenar.','Desparar taula després de sopar.','Clear the table after dinner.'),2,'evening','utensils',{children:['aina'],days:[1,2,3,4,5]}),
+    daily('teeth',w('Lavar los dientes','Rentar-me les dents','Brush my teeth'),w('Cepillar los dientes por la mañana y por la noche.','Rentar-me les dents al matí i a la nit.','Brush my teeth in the morning and at night.'),2,'all-day','shower',{limit:2}),
+    daily('kids-us',w('Kids&Us Homework','Deures de Kids&Us','Kids&Us Homework'),w('Escuchar el audio o hacer las tareas de la app.','Escoltar l’àudio o fer les tasques de l’app.','Listen to the audio or do the tasks in the app.'),5,'afternoon','book',{days:[1,2,3,4,5]}),
+    daily('plan',w('Organizar mi día','Organitzar el meu dia','Plan my day'),w('Revisar mi lista y elegir por dónde empezar.','Revisar la meva llista i triar per on començar.','Check my list and choose where to start.'),5,'morning','list'),
+    daily('shower',w('Mi rutina de ducha','La meva rutina de dutxa','My shower routine'),w('Seguir los pasos de higiene que hemos aprendido. Pedir ayuda está bien.','Seguir els passos d’higiene que hem après. Demanar ajuda està bé.','Follow the hygiene steps we have learned. It is okay to ask for help.'),10,'evening','shower'),
+    daily('bag',w('Mochila del cole','Motxilla de l’escola','School bag'),w('Preparar y revisar lo que necesito para mañana.','Preparar i revisar el que necessito per demà.','Pack and check what I need for tomorrow.'),5,'evening','backpack',{days:[0,1,2,3,4]}),
+    daily('bag-extra-iara',w('Mochila extraescolar','Motxilla extraescolar','After-school bag'),w('Preparar y revisar lo que necesito para mañana.','Preparar i revisar el que necessito per demà.','Pack and check what I need for tomorrow.'),5,'evening','backpack',{children:['iara'],days:[0,1,2]}),
+    daily('bag-extra-aina',w('Mochila extraescolar','Motxilla extraescolar','After-school bag'),w('Preparar y revisar lo que necesito para mañana.','Preparar i revisar el que necessito per demà.','Pack and check what I need for tomorrow.'),5,'evening','backpack',{children:['aina'],days:[1,2,3]}),
+    daily('clothes',w('Elegir la ropa de mañana','Triar la roba de demà','Choose tomorrow’s clothes'),w('Dejar la ropa lista para empezar con calma.','Deixar la roba a punt per començar amb calma.','Lay out my clothes for a calm start.'),5,'evening','shirt'),
+    daily('school-homework',w('Responsabilizarme de los deberes del cole','Fer-me responsable dels deures de l’escola','Take responsibility for school homework'),w('Revisar la agenda todos los días y entregar los deberes a tiempo.','Revisar l’agenda cada dia i lliurar els deures a temps.','Check my planner every day and finish homework on time.'),10,'all-day','book',{children:['iara'],cadence:'weekly'}),
+    daily('new-food',w('Probar un alimento nuevo','Tastar un aliment nou','Try a new food'),w('Los padres escogerán cinco alimentos para elegir. Hay que probar y tragar uno; escupirlo no cuenta.','Els pares triaran cinc aliments. Cal tastar-ne i empassar-ne un; escopir-lo no compta.','Parents choose five foods. Try and swallow one; spitting it out does not count.'),10,'all-day','utensils',{children:['aina'],cadence:'weekly'}),
   ];
-  return { version: 1, tasks: specs.map(([id,title,description,xp,category,icon]) => ({...base,id,title,description,xp,category,icon,days:id==='bag'?[0,1,2,3,4]:base.days})), rewards: [], completions: [], redemptions: [], pauses: [], preferences: { aina: {lang:'es',goal:null}, iara:{lang:'es',goal:null}, xavi:{lang:'es',goal:null}, mireia:{lang:'es',goal:null} }, weekStart:5, processed:[], audit:[] };
+  const sleepover: Reward = {
+    id: 'friend-sleepover',
+    title: w('Traer una amiga a dormir el fin de semana', 'Convidar una amiga a dormir el cap de setmana', 'Invite a friend for a weekend sleepover'),
+    description: w('Se desbloquea al conseguir el superbonus semanal. Los padres confirman la fecha.', 'Es desbloqueja en aconseguir el superbonus setmanal. Els pares confirmen la data.', 'Unlocks with a weekly super bonus. Parents confirm the date.'),
+    xp: 0, requiresSuperBonus: true, children: ['aina', 'iara'], status: 'approved', author: 'xavi', note: '', icon: 'bed', limit: 99, created: now,
+  };
+  return { version: 1, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], preferences: { aina: {lang:'es',goal:null}, iara:{lang:'es',goal:null}, xavi:{lang:'es',goal:null}, mireia:{lang:'es',goal:null} }, weekStart:5, processed:[], audit:[] };
 }
 function requireThat(value: unknown, code = 'invalid') { if (!value) throw new DomainError(code); }
 function text(v: unknown, max = 160) { requireThat(typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max); return (v as string).trim(); }
@@ -55,7 +75,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   requireThat(Object.hasOwn(names,actor),'forbidden');
   requireThat(typeof a.requestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(a.requestId));
   if(original.processed.includes(a.requestId)) return original;
-  const s: State = settleCycles(structuredClone(original),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor);
+  const s: State = settleCycles(settleWeeklyBonuses(structuredClone(original),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor);
   const requireParent = () => requireThat(parent,'forbidden');
   const childFor = (): Child => { const c = a.child; requireThat(c==='aina'||c==='iara'); requireThat(parent||c===actor,'forbidden'); return c as Child; };
   let log = a.type;
@@ -92,27 +112,34 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     if(a.id) requireThat(old,'missing');
     if(old && !parent) requireThat(old.author===actor && (old.status==='pending'||old.status==='changes'),'forbidden');
     const item = { id:old?.id ?? a.requestId,title:text(a.title,100),description:optional(a.description,600),xp:integer(a.xp,task?1:0,task?100:10000),children:parent?children(a.children):[actor as Child],status:parent?'approved' as Status:'pending' as Status,author:old?.author??actor,note:parent?optional(a.note,300):'',icon:typeof a.icon==='string'&&['gift','film','headphones','game','book','sparkles','bed','shirt','utensils','list','shower','backpack'].includes(a.icon)?a.icon:(task?'sparkles':'gift'),limit:integer(a.limit??1,1,task?5:99),created:old?.created??at };
-    if(!task && parent) requireThat(item.xp>0);
+    if(!task && parent) requireThat(item.xp>0 || a.requiresSuperBonus===true,'price');
     if(task) {
       requireThat(['all-day','morning','afternoon','evening'].includes(String(a.category)));
       requireThat(Array.isArray(a.days)&&a.days.length<=7&&a.days.every(x=>Number.isInteger(x)&&x>=0&&x<=6));
       const once=a.once===true; requireThat(once||(a.days as number[]).length>0);
-      const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit};
+      requireThat(a.cadence===undefined||a.cadence==='daily'||a.cadence==='weekly');
+      const cadence: NonNullable<Task['cadence']> = a.cadence==='weekly'?'weekly':'daily';
+      const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit,cadence};
       s.tasks=old?s.tasks.map(x=>x.id===old.id?next:x):[...s.tasks,next];
-    } else s.rewards=old?s.rewards.map(x=>x.id===old.id?item:x):[...s.rewards,item];
+    } else {
+      const reward={...item,requiresSuperBonus:parent&&a.requiresSuperBonus===true};
+      s.rewards=old?s.rewards.map(x=>x.id===old.id?reward:x):[...s.rewards,reward];
+    }
     log=item.title;
   } else if(a.type === 'review') {
     requireParent(); requireThat(a.kind==='task'||a.kind==='reward');
     const item=(a.kind==='task'?s.tasks:s.rewards).find(x=>x.id===a.id); requireThat(item,'missing');
     requireThat(['approved','changes','archived'].includes(String(a.status)));
-    if(a.status==='approved') requireThat(item!.xp>0,'price');
+    if(a.status==='approved') requireThat(item!.xp>0 || (a.kind==='reward' && (item as Reward).requiresSuperBonus),'price');
     item!.status=a.status as Status; item!.note=optional(a.note,300); if(a.status==='changes') requireThat(item!.note.length>0);
     log=words(item!.title);
   } else if(a.type === 'redeem') {
     const child=childFor(); const r=s.rewards.find(x=>x.id===a.rewardId); requireThat(r&&r.status==='approved'&&r.children.includes(child),'missing');
-    requireThat(totals(s,child,today).balance>=r!.xp,'funds');
+    const superBonus=r!.requiresSuperBonus?availableSuperBonus(s,child,r!.id):undefined;
+    if(r!.requiresSuperBonus) requireThat(superBonus,'bonus');
+    requireThat(r!.xp===0||totals(s,child,today).balance>=r!.xp,'funds');
     requireThat(s.redemptions.filter(x=>x.child===child&&x.rewardId===r!.id&&x.status!=='cancelled').length<r!.limit,'limit');
-    s.redemptions.push({id:a.requestId,rewardId:r!.id,child,title:r!.title,xp:r!.xp,status:'pending',at,note:''}); log=words(r!.title);
+    s.redemptions.push({id:a.requestId,rewardId:r!.id,child,title:r!.title,xp:r!.xp,bonusWeek:superBonus?.week,status:'pending',at,note:''}); log=words(r!.title);
   } else if(a.type === 'redemption') {
     const r=s.redemptions.find(x=>x.id===a.id); requireThat(r,'missing');
     if(!parent) requireThat(r!.child===actor&&r!.status==='pending'&&a.status==='cancelled','forbidden');
@@ -144,6 +171,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     s.changes ??= [];
     for(const collection of ['tasks','rewards','pauses','redemptions'] as const){for(const item of s[collection]){const before=original[collection].find(x=>x.id===item.id);if(JSON.stringify(before)!==JSON.stringify(item))s.changes.push({id:a.requestId,at,actor,title:log,collection,key:item.id,before:before?structuredClone(before):undefined,after:structuredClone(item)});}}
   }
+  settleWeeklyBonuses(s,now);
   s.badges ??= [];
   for(const child of ['aina','iara'] as Child[])for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
   s.processed.push(a.requestId);
@@ -153,5 +181,5 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
 export function visibleState(s: State, p: Person): State {
   if(isParent(p)) return {...s,processed:[]};
   const child=p as Child;
-  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
+  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
 }

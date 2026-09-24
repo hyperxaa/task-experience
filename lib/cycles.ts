@@ -34,7 +34,8 @@ export function xpAt(c: Completion, cutoff?: string) {
 export function inCycle(c: Completion, cycle: Cycle) { const at = effectiveAt(c); return at >= cycle.start && at < cycle.end; }
 export function cycleSummary(s: State, cycle: Cycle, child: Child, cutoff?: string) {
   const rows = s.completions.filter(c => c.child === child && inCycle(c, cycle));
-  return { xp: rows.reduce((n, c) => n + xpAt(c, cutoff), 0), tasks: rows.filter(c => xpAt(c, cutoff) > 0).length };
+  const bonuses = s.weeklyBonuses?.filter(b => b.child === child && b.at >= cycle.start && b.at < cycle.end && (!cutoff || b.at < cutoff)) ?? [];
+  return { xp: rows.reduce((n, c) => n + xpAt(c, cutoff), 0) + bonuses.reduce((n,b)=>n+b.xp,0), tasks: rows.filter(c => xpAt(c, cutoff) > 0 && !c.taskId.startsWith('egg-')).length };
 }
 export function settleCycles(s: State, now = new Date()) {
   for(const c of s.completions){
