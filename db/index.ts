@@ -23,6 +23,7 @@ function databasePath() {
   const configured = process.env.DATABASE_URL || './data/taskxp.db';
   if (configured.startsWith('file:')) return fileURLToPath(configured);
   if (isAbsolute(configured)) return configured;
+  if (process.env.NODE_ENV === 'production') throw new Error('DATABASE_URL must be an absolute path in production');
   const relative = configured.replace(/^(?:\.?[\\/])?(?:data[\\/])?/, '');
   const root = resolve(process.cwd(), 'data');
   const path = join(process.cwd(), 'data', relative);

@@ -65,12 +65,18 @@ test('access lifecycle: short session, remembered device, parent boundary and re
   const setup = await request({ op: 'setup', password });
   assert.equal(setup.status, 200);
   codes = setup.data.animalCodes;
+  const setupCredentials = JSON.parse(sql.prepare('SELECT credentials FROM family').get().credentials);
+  assert.equal(setupCredentials.pendingCodes, undefined);
+  assert.equal(typeof setupCredentials.pendingCodesEncrypted, 'string');
+  assert.equal(JSON.stringify(setupCredentials).includes(codes.aina.join('.')), false);
   assert.match(setup.setCookie, /Max-Age=43200/);
   const code = (profile) => codes[profile].join('.');
 
   assert.equal((await request({ op: 'login', password: 'wrong', remember: true })).status, 400);
   const login = await request({ op: 'login', password, remember: true });
   assert.equal(login.status, 200);
+  assert.deepEqual(login.data.animalCodes, codes);
+  assert.equal(JSON.parse(sql.prepare('SELECT credentials FROM family').get().credentials).pendingCodesEncrypted, undefined);
   assert.match(login.setCookie, /Max-Age=43200/);
   assert.match(login.setCookie, /txp_remember=.*Max-Age=31536000/);
   assert.match(login.setCookie, /HttpOnly; SameSite=Strict/);
@@ -103,6 +109,7 @@ test('access lifecycle: short session, remembered device, parent boundary and re
 
   const transient = await request({ op: 'login', password, remember: false });
   assert.equal(transient.status, 200);
+  assert.equal(transient.data.animalCodes, undefined);
   assert.match(transient.setCookie, /Max-Age=43200/);
   assert.match(transient.setCookie, /txp_remember=; Path=\/; HttpOnly; SameSite=Strict; Max-Age=0/);
   assert.equal(sql.prepare('SELECT count(*) AS n FROM remember_devices').get().n, 0);
@@ -130,6 +137,13 @@ test('animal-code attempts are limited across all profiles', async () => {
   assert.equal((await request({ op: 'unlock', code: codes.aina.join('.') })).status, 429);
 });
 
+test('correct profile selections do not consume the failed-attempt allowance', async () => {
+  sql.exec('DELETE FROM attempts');
+  await request({ op: 'login', password, remember: false });
+  for (let i = 0; i < 11; i++) assert.equal((await request({ op: 'unlock', code: codes.aina.join('.') })).status, 200);
+  assert.equal(sql.prepare("SELECT count(*) AS n FROM attempts WHERE key LIKE 'pin-auto:%'").get().n, 0);
+});
+
 test('duplicate animal code never selects an arbitrary profile', async () => {
   await request({ op: 'login', password, remember: false });
   sql.exec('DELETE FROM attempts');
@@ -139,4 +153,17 @@ test('duplicate animal code never selects an arbitrary profile', async () => {
   await request({ op: 'lock' });
   assert.equal((await request({ op: 'unlock', code: codes.aina.join('.') })).data.needsProfile, true);
   assert.equal((await request(null, { method: 'GET' })).data.profile, null);
+});
+
+test('legacy plaintext pending animal codes are encrypted on first read', async () => {
+  const credentials = JSON.parse(sql.prepare('SELECT credentials FROM family').get().credentials);
+  credentials.pendingCodes = codes;
+  sql.prepare('UPDATE family SET credentials=?').run(JSON.stringify(credentials));
+  await request(null, { method: 'GET' });
+  const upgraded = JSON.parse(sql.prepare('SELECT credentials FROM family').get().credentials);
+  assert.equal(upgraded.pendingCodes, undefined);
+  assert.equal(typeof upgraded.pendingCodesEncrypted, 'string');
+  assert.equal(JSON.stringify(upgraded).includes(codes.aina.join('.')), false);
+  const login = await request({ op: 'login', password, remember: false });
+  assert.deepEqual(login.data.animalCodes, codes);
 });

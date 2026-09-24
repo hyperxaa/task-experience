@@ -9,6 +9,7 @@
     "dev": "next dev --hostname 127.0.0.1 --port 5191",
     "build": "node scripts/build.mjs",
     "start": "node scripts/start.mjs",
+    "backup": "node scripts/backup.mjs",
     "lint": "eslint app db lib scripts tests",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",

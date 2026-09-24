@@ -1,5 +1,5 @@
 import argon2 from 'argon2';
-import { randomBytes, createHash, createHmac, pbkdf2 as pbkdf2Callback, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, pbkdf2 as pbkdf2Callback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { getDatabase, type BoundStatement } from '../db';
 import { applyAction, initialState, visibleState, isParent, names, DomainError, type Person, type State, type Action } from './domain';
@@ -8,7 +8,7 @@ import { settleCycles } from './cycles';
 type Stored = { id: number; revision: number; data: string; credentials: string };
 type Session = { token: string; profile: Person | null; expires: number; parent_until: number; remember_token: string | null };
 type Hash = { salt: string; hash: string; algorithm?: 'argon2id' | 'pbkdf2' };
-type Credentials = { password: Hash; codes?: Record<Person, Hash>; pins?: Record<Person, Hash>; pendingCodes?: Record<Person, string[]> };
+type Credentials = { password: Hash; codes?: Record<Person, Hash>; pins?: Record<Person, Hash>; pendingCodes?: Record<Person, string[]>; pendingCodesEncrypted?: string };
 const animalIds = ['bengal', 'panda', 'fox', 'otter', 'owl', 'frog', 'lion', 'bunny', 'koala', 'dog', 'penguin', 'flamingo'];
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const DEVICE_MS = 365 * 24 * 60 * 60 * 1000;
@@ -22,6 +22,22 @@ function pepper(value: string) {
   const secret = process.env.SESSION_SECRET;
   if (process.env.NODE_ENV === 'production' && (!secret || !/^[a-f0-9]{64,}$/i.test(secret))) throw new Error('SESSION_SECRET must be at least 32 random bytes encoded as hex');
   return createHmac('sha256', secret || 'local-development-only-task-xp-pepper').update(value).digest('hex');
+}
+function pendingCodeKey() {
+  return createHash('sha256').update(pepper('pending-animal-codes-v1')).digest();
+}
+function encryptPendingCodes(codes: Record<Person, string[]>) {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', pendingCodeKey(), nonce);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(codes), 'utf8'), cipher.final()]);
+  return [nonce, cipher.getAuthTag(), encrypted].map(hex).join('.');
+}
+function decryptPendingCodes(value: string): Record<Person, string[]> {
+  const parts = value.split('.');
+  if (parts.length !== 3 || !/^[a-f0-9]{24}$/.test(parts[0]) || !/^[a-f0-9]{32}$/.test(parts[1]) || !/^[a-f0-9]+$/.test(parts[2])) throw new Error('Invalid pending animal codes');
+  const decipher = createDecipheriv('aes-256-gcm', pendingCodeKey(), Buffer.from(parts[0], 'hex'));
+  decipher.setAuthTag(Buffer.from(parts[1], 'hex'));
+  return JSON.parse(Buffer.concat([decipher.update(Buffer.from(parts[2], 'hex')), decipher.final()]).toString('utf8')) as Record<Person, string[]>;
 }
 
 async function passwordHash(value: string): Promise<Hash> {
@@ -129,11 +145,16 @@ async function restoreDevice(request: Request) {
   const session: Session = { token: digest(sessionValue), profile: null, expires, parent_until: 0, remember_token: rotatedToken };
   return { session, cookies: [cookie(request, 'txp_session', sessionValue, Math.floor(SESSION_MS / 1000)), cookie(request, 'txp_remember', rotatedValue, Math.max(0, Math.floor((device.expires - now) / 1000)))] };
 }
-async function limit(key: string) {
+async function checkLimit(key: string) {
+  const row = await db().prepare('SELECT count, until FROM attempts WHERE key = ?').bind(key).first<{ count: number; until: number }>();
+  if (row && row.until > Date.now() && row.count >= 10) throw new DomainError('rate');
+}
+async function failedAttempt(key: string) {
   const now = Date.now();
   await db().prepare('INSERT INTO attempts (key, count, until) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = CASE WHEN until <= ? THEN 1 ELSE count + 1 END, until = CASE WHEN until <= ? THEN ? ELSE until END').bind(key, now + 15 * 60000, now, now, now + 15 * 60000).run();
-  const row = await db().prepare('SELECT count FROM attempts WHERE key = ?').bind(key).first<{ count: number }>();
-  if (row && row.count > 10) throw new DomainError('rate');
+}
+async function clearAttempts(key: string) {
+  await db().prepare('DELETE FROM attempts WHERE key = ?').bind(key).run();
 }
 function checkOrigin(request: Request) {
   const origin = request.headers.get('origin');
@@ -164,6 +185,15 @@ export async function handle(request: Request) {
   const reply = (data: unknown, status = 200, cookies: string[] = []) => response(data, status, [...responseCookies, ...cookies]);
   try {
     let row = await db().prepare('SELECT * FROM family WHERE id = 1').first<Stored>();
+    if (row) {
+      const credentials = JSON.parse(row.credentials) as Credentials;
+      if (credentials.pendingCodes) {
+        credentials.pendingCodesEncrypted = encryptPendingCodes(credentials.pendingCodes);
+        delete credentials.pendingCodes;
+        await db().prepare('UPDATE family SET credentials = ? WHERE id = 1 AND credentials = ?').bind(JSON.stringify(credentials), row.credentials).run();
+        row = await db().prepare('SELECT * FROM family WHERE id = 1').first<Stored>();
+      }
+    }
     let session = await readSession(request);
     if (!session) {
       const restored = await restoreDevice(request);
@@ -199,20 +229,22 @@ export async function handle(request: Request) {
       if (!setupAllowed(request, body)) throw new DomainError('setup');
       if (typeof body.password !== 'string' || body.password.length < 10 || body.password.length > 128) throw new DomainError('password');
       const generated = makeAnimalCodes();
-      const credentials: Credentials = { password: await passwordHash(body.password), codes: await codeHashes(generated), pendingCodes: generated };
+      const credentials: Credentials = { password: await passwordHash(body.password), codes: await codeHashes(generated), pendingCodesEncrypted: encryptPendingCodes(generated) };
       const state = initialState();
       await db().prepare('INSERT INTO family (id, revision, data, credentials) VALUES (1, 0, ?, ?)').bind(JSON.stringify(state), JSON.stringify(credentials)).run();
       return reply({ ok: true, animalCodes: generated }, 200, await newSession(request, null));
     }
     if (!row) throw new DomainError('setup');
     if (op === 'login') {
-      await limit('login:' + digest(ip));
+      const attemptKey = 'login:' + digest(ip);
+      await checkLimit(attemptKey);
       const credentials: Credentials = JSON.parse(row.credentials);
-      if (!await matches(body.password, credentials.password)) throw new DomainError('credentials');
+      if (!await matches(body.password, credentials.password)) { await failedAttempt(attemptKey); throw new DomainError('credentials'); }
+      await clearAttempts(attemptKey);
       const upgraded = credentials.password.algorithm !== 'argon2id' && !credentials.password.hash.startsWith('$argon2id$');
       if (upgraded) credentials.password = await passwordHash(String(body.password));
-      const reveal = credentials.pendingCodes;
-      if (reveal) delete credentials.pendingCodes;
+      const reveal = credentials.pendingCodesEncrypted ? decryptPendingCodes(credentials.pendingCodesEncrypted) : undefined;
+      if (reveal) delete credentials.pendingCodesEncrypted;
       if (upgraded || reveal) await db().prepare('UPDATE family SET credentials = ? WHERE id = 1').bind(JSON.stringify(credentials)).run();
       return reply({ ok: true, ...(reveal ? { animalCodes: reveal } : {}) }, 200, await newSession(request, null, session, body.remember === true));
     }
@@ -226,22 +258,26 @@ export async function handle(request: Request) {
     }
     if (op === 'lock') return reply({ ok: true }, 200, await newSession(request, null, session));
     if (op === 'unlock') {
-      await limit('pin-auto:' + digest(ip));
+      const attemptKey = 'pin-auto:' + digest(ip);
+      await checkLimit(attemptKey);
       const credentials: Credentials = JSON.parse(row.credentials), stored = credentials.codes ?? credentials.pins;
       if (!stored) throw new DomainError('credentials');
       const candidate = body.code ?? body.pin;
       const found: Person[] = [];
       for (const profile of Object.keys(names) as Person[]) if (await matches(candidate, stored[profile])) found.push(profile);
-      if (!found.length) throw new DomainError('credentials');
+      if (!found.length) { await failedAttempt(attemptKey); throw new DomainError('credentials'); }
+      await clearAttempts(attemptKey);
       if (found.length > 1) return reply({ needsProfile: true });
       return reply({ ok: true }, 200, await newSession(request, found[0], session));
     }
     if (op === 'profile') {
       const profile = body.profile as Person;
       if (!Object.hasOwn(names, profile)) throw new DomainError('invalid');
-      await limit('pin:' + profile + ':' + digest(ip));
+      const attemptKey = 'pin:' + profile + ':' + digest(ip);
+      await checkLimit(attemptKey);
       const credentials: Credentials = JSON.parse(row.credentials), stored = credentials.codes ?? credentials.pins;
-      if (!stored || !await matches(body.code ?? body.pin, stored[profile])) throw new DomainError('credentials');
+      if (!stored || !await matches(body.code ?? body.pin, stored[profile])) { await failedAttempt(attemptKey); throw new DomainError('credentials'); }
+      await clearAttempts(attemptKey);
       return reply({ ok: true }, 200, await newSession(request, profile, session));
     }
     if (!session.profile) return reply({ error: 'session' }, 401);
@@ -249,8 +285,10 @@ export async function handle(request: Request) {
       if (!isParent(session.profile)) throw new DomainError('forbidden');
       const credentials: Credentials = JSON.parse(row.credentials), stored = credentials.codes ?? credentials.pins;
       if (!stored) throw new DomainError('credentials');
-      await limit('security:' + digest(ip));
-      if (!await matches(body.currentCode ?? body.currentPin, stored[session.profile])) throw new DomainError('credentials');
+      const attemptKey = 'security:' + digest(ip);
+      await checkLimit(attemptKey);
+      if (!await matches(body.currentCode ?? body.currentPin, stored[session.profile])) { await failedAttempt(attemptKey); throw new DomainError('credentials'); }
+      await clearAttempts(attemptKey);
       if (typeof body.password === 'string' && body.password) {
         if (body.password.length < 10 || body.password.length > 128) throw new DomainError('password');
         credentials.password = await passwordHash(body.password);
@@ -262,6 +300,8 @@ export async function handle(request: Request) {
         credentials.codes ??= {} as Record<Person, Hash>;
         credentials.codes[profile] = await passwordHash(code);
       }
+      delete credentials.pendingCodesEncrypted;
+      delete credentials.pendingCodes;
       await db().batch([
         db().prepare('UPDATE family SET credentials = ? WHERE id = 1').bind(JSON.stringify(credentials)),
         db().prepare('DELETE FROM sessions WHERE token != ?').bind(session.token),

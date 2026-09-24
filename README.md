@@ -9,10 +9,16 @@ Esta rama sustituye el runtime de Cloudflare por **Next.js sobre Node.js**, **SQ
 - Ubuntu 24.04 ARM64 en `erik`: Node.js 22.13 o posterior, Next.js en modo standalone, SQLite y `better-sqlite3`.
 - Ubuntu 24.04 x86_64 en `mark`: nginx termina TLS público y hace proxy HTTP por la LAN a `erik`.
 - No hay Docker, Cloudflare Workers ni D1 en el runtime de esta rama.
-- La base por defecto es `./data/taskxp.db`; en producción usa una ruta persistente como `/var/lib/taskxp/taskxp.db`, fuera del checkout.
+- En desarrollo la base por defecto es `./data/taskxp.db`. En producción `DATABASE_URL` **debe ser una ruta absoluta** a un disco persistente, como `/var/lib/taskxp/taskxp.db`; la app rechaza rutas relativas para evitar guardar datos dentro de `.next/standalone`.
 - SQLite activa WAL, `synchronous=NORMAL`, claves foráneas y `busy_timeout=5000`. La base debe vivir en disco local de `erik`, nunca en NFS/SMB o una carpeta compartida.
 - La API de dominio conserva una interfaz pequeña (`prepare/bind/first/run/batch`) para no reescribir toda su lógica de una vez; ahora la ejecuta `better-sqlite3`, sin binding D1. Drizzle también apunta a SQLite y mantiene las tablas de la app.
 - La instalación inicial empieza **vacía**, con contraseña familiar y combinaciones de animales nuevas. No se copian automáticamente los datos del Site publicado ni del Wrangler local.
+
+## Cómo funciona
+
+El navegador abre la URL pública en `mark`. nginx termina HTTPS y reenvía la petición a Next.js en `erik` por la LAN. La ruta `/api/xp` llama a `lib/server.ts`: valida sesión, perfil y operación; `lib/domain.ts` aplica las reglas de Xp, tareas y premios; `db/index.ts` persiste el estado y las credenciales en SQLite local. El estado visible se filtra según el perfil antes de volver al navegador. El reconocimiento de voz ocurre en el navegador y pide confirmación antes de enviar una acción a la API.
+
+El servidor standalone escucha en `HOST:PORT`; `scripts/start.mjs` transmite estos valores a Next.js. `PUBLIC_ORIGIN` debe coincidir con la URL HTTPS que usa el navegador: sirve para comprobar `Origin` en operaciones de escritura y para marcar las cookies como `Secure`. `TASK_XP_TRUST_PROXY=true` hace que el limitador de intentos use `X-Real-IP`, sobrescrito por nginx.
 
 ## Requisitos
 
@@ -49,7 +55,7 @@ sudo useradd --system --home /opt/taskxp --shell /usr/sbin/nologin taskxp
 sudo install -d -o taskxp -g taskxp -m 0750 /opt/taskxp /var/lib/taskxp
 sudo -u taskxp git clone --branch linux https://github.com/hyperxaa/task-experience.git /opt/taskxp
 cd /opt/taskxp
-npm ci
+sudo -u taskxp npm ci
 ```
 
 Si el repositorio ya está clonado, usa `git fetch origin && git switch linux && git pull --ff-only` en vez de clonar de nuevo.
@@ -71,7 +77,7 @@ NODE_ENV=production
 
 `PUBLIC_ORIGIN` es el origen que verá el navegador, con esquema, host y puerto si aplica, sin ruta. Se usa para validar `Origin` y decidir el atributo `Secure` de las cookies. Si la app solo se ofrece por HTTP privado, configura el origen real `http://...`; para acceso por Internet publica HTTPS en nginx.
 
-`SESSION_SECRET` es un pepper de 32 bytes para proteger hashes Argon2id, sobre todo los códigos de animales que tienen menos combinaciones posibles que una contraseña. Se comprueba al crear o validar credenciales, así que consérvalo en las copias seguras: perderlo invalida las credenciales Argon2id. Los tokens de sesión/dispositivo se generan aleatoriamente, son opacos y SQLite solo guarda su SHA-256. `TASK_XP_SETUP_TOKEN` autoriza la creación inicial y no es la contraseña familiar. Ambos deben seguir fuera de Git y de logs.
+`SESSION_SECRET` es un pepper de 32 bytes para proteger hashes Argon2id, sobre todo los códigos de animales que tienen menos combinaciones posibles que una contraseña. También cifra temporalmente los códigos pendientes de revelar. Se comprueba al crear o validar credenciales, así que consérvalo en las copias seguras: perderlo invalida las credenciales Argon2id. Los tokens de sesión/dispositivo se generan aleatoriamente, son opacos y SQLite solo guarda su SHA-256. `TASK_XP_SETUP_TOKEN` autoriza la creación inicial y no es la contraseña familiar. Ambos deben seguir fuera de Git y de logs.
 
 ```sh
 sudo chown taskxp:taskxp /opt/taskxp/.env.local
@@ -161,47 +167,46 @@ Valida y recarga: `sudo nginx -t && sudo systemctl reload nginx`. La conexión `
 
 ## Primer acceso familiar
 
-Abre `https://taskxp.example.net`. En la pantalla inicial introduce la contraseña familiar (10–128 caracteres) y el token `TASK_XP_SETUP_TOKEN`. La app genera cuatro códigos distintos, cada uno con cuatro animales en orden, usando el catálogo que incluye el gato bengalí. Guárdalos en el gestor familiar de contraseñas: se muestran una vez y el servidor conserva únicamente hashes Argon2id.
+Abre `https://taskxp.example.net`. En la pantalla inicial introduce la contraseña familiar (10–128 caracteres) y el token `TASK_XP_SETUP_TOKEN`. La app genera cuatro códigos distintos, cada uno con cuatro animales en orden, usando el catálogo que incluye el gato bengalí. Guárdalos en el gestor familiar de contraseñas. SQLite guarda los hashes Argon2id y una copia **cifrada** de los códigos para recuperarlos si se interrumpe esta pantalla; la copia se borra al primer login correcto con la contraseña familiar. Los códigos nunca se guardan en claro. Una instalación creada con una versión anterior cifra automáticamente los códigos pendientes al recibir la primera petición.
 
 El setup token puede retirarse de `.env.local` y reiniciar el servicio después de crear la familia. La API rechaza nuevos setups una vez inicializada la base. La entrada de contraseña y la de los códigos tienen límites de intentos persistidos en SQLite.
 
 ## Sesiones y credenciales
 
-- Contraseña familiar y códigos se guardan como Argon2id; los códigos nunca se guardan en claro tras revelarse por primera vez. Los valores PBKDF2 de instalaciones previas se verifican y se actualizan al iniciar sesión correctamente.
+- Contraseña familiar y códigos se verifican con Argon2id. Tras el primer login familiar correcto se borra la copia cifrada y solo permanecen los hashes. La contraseña PBKDF2 de instalaciones previas se actualiza a Argon2id al iniciar sesión correctamente.
 - Cookie de sesión `HttpOnly`, `SameSite=Strict`, `Secure` cuando `PUBLIC_ORIGIN` usa HTTPS; caduca a las 12 horas. Los tokens son aleatorios y SQLite solo contiene su SHA-256.
 - «Recordar este dispositivo» crea otra cookie opaca, con vida máxima de un año. Se almacena el hash, se rota al recuperar una sesión caducada y se revoca al cerrar sesión. Cambiar la contraseña o códigos revoca los demás dispositivos.
 - Los perfiles parentales se bloquean tras 15 minutos; cada perfil se vuelve a seleccionar con su código.
-- La API valida `Origin` contra `PUBLIC_ORIGIN`, limita el tamaño del JSON y limita intentos por IP cuando `TASK_XP_TRUST_PROXY=true` y nginx sobrescribe `X-Real-IP`.
+- La API valida `Origin` contra `PUBLIC_ORIGIN`, limita el tamaño del JSON y bloquea temporalmente los intentos **fallidos** por IP cuando `TASK_XP_TRUST_PROXY=true` y nginx sobrescribe `X-Real-IP`. Los accesos correctos no consumen el límite.
 - La primera instalación no incluye ninguna contraseña predeterminada, endpoint de login de ChatGPT ni mock de autenticación.
 
 ## Actualizaciones y copias de seguridad
 
-Haz cada actualización desde `erik` y compila allí:
+Haz cada actualización desde `erik`. Primero crea una copia consistente con la API de backup de SQLite mientras la app sigue funcionando. Después para el servicio antes de cambiar dependencias o reconstruir `.next`; `next build` limpia esa carpeta y el servicio en ejecución la necesita.
 
 ```sh
 cd /opt/taskxp
+sudo -u taskxp env DATABASE_URL=/var/lib/taskxp/taskxp.db npm run backup
 sudo -u taskxp git fetch origin
+sudo systemctl stop taskxp
 sudo -u taskxp git switch linux
 sudo -u taskxp git pull --ff-only
 sudo -u taskxp npm ci
 sudo -u taskxp npm run typecheck
 sudo -u taskxp npm test
 sudo -u taskxp npm run build
-sudo systemctl restart taskxp
+sudo systemctl start taskxp
 sudo systemctl status taskxp
 ```
 
-Antes de actualizar SQLite o la app, toma una copia consistente. La forma más sencilla es detener el servicio y copiar el archivo principal; al cerrar la conexión, SQLite consolida WAL:
+También puedes hacer una copia en cualquier momento sin parar el servicio:
 
 ```sh
-sudo systemctl stop taskxp
-sudo install -d -o taskxp -g taskxp -m 0700 /var/lib/taskxp/backups
-sudo install -o taskxp -g taskxp -m 0600 /var/lib/taskxp/taskxp.db \
-  "/var/lib/taskxp/backups/taskxp-$(date +%F-%H%M%S).db"
-sudo systemctl start taskxp
+cd /opt/taskxp
+sudo -u taskxp env DATABASE_URL=/var/lib/taskxp/taskxp.db npm run backup
 ```
 
-Crea antes `/var/lib/taskxp/backups` con propietario `taskxp` y permisos `0700`. También puedes automatizar una copia diaria, conservar copias fuera de `erik` y ensayar restauraciones. La exportación desde la aplicación solo contiene el estado de tareas, progreso y premios; no incluye credenciales ni sesiones, y no sustituye a la copia SQLite.
+El script crea `/var/lib/taskxp/backups` con permisos `0700`, guarda una copia íntegra con permisos `0600`, comprueba su integridad y muestra la ruta creada. Incluye las transacciones aún pendientes en el WAL. No copies solo `taskxp.db` mientras la app está activa ni confíes en que una parada siempre vacíe el WAL. Conserva copias fuera de `erik` y ensaya restauraciones. La exportación desde la aplicación solo contiene tareas, progreso y premios; no incluye credenciales ni sesiones y no sustituye a la copia SQLite.
 
 ## Desarrollo y legado de Cloudflare
 
