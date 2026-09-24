@@ -1,7 +1,7 @@
 'use client';
 
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
-import { shiftDay, type Completion, type Lang } from '@/lib/domain';
+import { shiftDay, weekBeginning, type Completion, type Lang } from '@/lib/domain';
 import { bonusWeek, type WeeklyBonus } from '@/lib/weekly-bonuses';
 
 function label(day: string, locale: string, options: Intl.DateTimeFormatOptions) {
@@ -19,9 +19,8 @@ export function DayNavigator({ day, today, lang, completions, bonuses = [], onCh
   const locale = lang === 'ca' ? 'ca-ES' : lang === 'en' ? 'en-GB' : 'es-ES';
   const t = (es: string, ca: string, en: string) => lang === 'ca' ? ca : lang === 'en' ? en : es;
   const earliest = shiftDay(today, -31);
-  const windowStart = day >= shiftDay(today, -6) ? shiftDay(today, -6) : shiftDay(day, -3);
-  const days = Array.from({ length: 7 }, (_, index) => shiftDay(windowStart, index))
-    .filter((date) => date >= earliest && date <= today);
+  const windowStart = weekBeginning(day);
+  const days = Array.from({ length: 7 }, (_, index) => shiftDay(windowStart, index));
 
   return <div className="day-navigator" aria-label={t('Elegir día para gestionar', 'Triar el dia per gestionar', 'Choose a day to manage')}>
     <div className="day-navigator-toolbar">
@@ -40,7 +39,7 @@ export function DayNavigator({ day, today, lang, completions, bonuses = [], onCh
         const weekAwards = bonuses.filter(bonus => bonus.week === bonusWeek(date));
         const mark = weekAwards.some(bonus => bonus.kind === 'super') ? 'super' : weekAwards.some(bonus => completions.some(completion => completion.day === date && completion.taskId === bonus.taskId && !completion.reversed)) ? 'silver' : '';
         const markLabel = mark === 'super' ? t(' · superbonus x5', ' · superbonus x5', ' · super bonus x5') : mark === 'silver' ? t(' · bonus x2', ' · bonus x2', ' · bonus x2') : '';
-        return <button key={date} type="button" className={`day-navigator-option ${day === date ? 'active' : ''} ${today === date ? 'today' : ''} ${mark ? `bonus-${mark}` : ''}`} aria-pressed={day === date} aria-label={`${label(date, locale, { weekday: 'long', day: 'numeric', month: 'long' })}${today === date ? ` · ${t('hoy', 'avui', 'today')}` : ''}${markLabel}`} title={markLabel.trim()} onClick={() => onChange(date)}>
+        return <button key={date} type="button" disabled={date < earliest || date > today} className={`day-navigator-option ${day === date ? 'active' : ''} ${today === date ? 'today' : ''} ${mark ? `bonus-${mark}` : ''}`} aria-pressed={day === date} aria-label={`${label(date, locale, { weekday: 'long', day: 'numeric', month: 'long' })}${today === date ? ` · ${t('hoy', 'avui', 'today')}` : ''}${markLabel}`} title={markLabel.trim()} onClick={() => onChange(date)}>
           <span>{label(date, locale, { weekday: 'short' })}</span>
           <strong>{label(date, locale, { day: 'numeric' })}</strong>
           <small>{count ? `${count} ${t('hechas', 'fetes', 'done')}` : today === date ? t('Hoy', 'Avui', 'Today') : '·'}</small>

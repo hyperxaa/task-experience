@@ -2,7 +2,7 @@ import argon2 from 'argon2';
 import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, pbkdf2 as pbkdf2Callback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { getDatabase, type BoundStatement } from '../db';
-import { applyAction, initialState, visibleState, isParent, names, DomainError, type Person, type State, type Action } from './domain';
+import { applyAction, initialState, migrateState, visibleState, isParent, names, DomainError, type Person, type State, type Action } from './domain';
 import { settleWeeklyBonuses } from './weekly-bonuses';
 import { settleCycles } from './cycles';
 
@@ -207,7 +207,7 @@ export async function handle(request: Request) {
     }
     if (row && session?.profile) {
       for (let retry = 0; retry < 5; retry++) {
-        const data = JSON.stringify(settleCycles(settleWeeklyBonuses(JSON.parse(row.data))));
+        const data = JSON.stringify(settleCycles(settleWeeklyBonuses(migrateState(JSON.parse(row.data)))));
         if (data === row.data) break;
         const result = await db().prepare('UPDATE family SET data = ?, revision = revision + 1 WHERE id = 1 AND revision = ?').bind(data, row.revision).run();
         if (result.meta.changes) { row = { ...row, data, revision: row.revision + 1 }; break; }

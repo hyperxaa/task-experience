@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { Completion, Lang, State } from '@/lib/domain';
+import type { Completion, Lang } from '@/lib/domain';
 
 const translator=(lang:Lang)=>(es:string,ca:string,en:string)=>lang==='ca'?ca:lang==='en'?en:es;
 
@@ -17,11 +17,6 @@ export function CorrectionForm({completion,onSubmit,busy,lang}:{completion:Compl
     <label>{t('Qué estamos corrigiendo','Què corregim','What are we correcting')}<small>{t('Una frase breve ayuda a que todo el mundo entienda el ajuste.','Una frase curta ajuda que tothom entengui l’ajust.','A short sentence helps everyone understand the adjustment.')}</small><textarea name="reason" required maxLength={300} rows={2} placeholder={t('Por ejemplo: Xp registrados de más','Per exemple: Xp registrats de més','For example: too much Xp recorded')}/></label>
     <Button type="submit" className="primary wide" disabled={busy}>{t('Guardar ajuste','Desar ajust','Save adjustment')}</Button>
   </form>;
-}
-
-export function CycleSettings({state,lang,busy,onSave}:{state:State;lang:Lang;busy:boolean;onSave:(day:number,time:string)=>void}){
-  const [day,setDay]=useState(state.cycleRule?.day??5),[time,setTime]=useState(state.cycleRule?.time??'18:00'),t=translator(lang),locale=lang==='ca'?'ca-ES':lang==='en'?'en-GB':'es-ES';
-  return <form onSubmit={e=>{e.preventDefault();onSave(day,time);}}><div className="form-grid"><label>{t('Día del cierre','Dia del tancament','Closing day')}<small>{t('Será el último día de la semana en todas las vistas.','Serà l’últim dia de la setmana a totes les vistes.','It becomes the final day of every week view.')}</small><select value={day} onChange={e=>setDay(+e.target.value)}>{[1,2,3,4,5,6,0].map(d=><option value={d} key={d}>{new Date(`2026-09-${20+d}T12:00:00Z`).toLocaleDateString(locale,{weekday:'long'})}</option>)}</select></label><label>{t('Hora del cierre','Hora del tancament','Closing time')}<small>{t('El balance queda listo a esta hora.','El balanç queda llest a aquesta hora.','The balance is ready at this time.')}</small><input type="time" required value={time} onChange={e=>setTime(e.target.value)}/></label></div><p className="muted">Europe/Madrid · {t('El cambio ajusta el ciclo en curso; los cierres anteriores conservan sus fechas.','El canvi ajusta el cicle en curs; els tancaments anteriors conserven les dates.','The change adjusts the open cycle; past closes keep their dates.')}</p><Button type="submit" variant="outline" disabled={busy||!time}>{t('Guardar cierre','Desar tancament','Save close')}</Button></form>;
 }
 
 export function ButtonHints({lang}:{lang:Lang}){

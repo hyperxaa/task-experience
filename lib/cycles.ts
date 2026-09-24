@@ -49,7 +49,7 @@ export function settleCycles(s: State, now = new Date()) {
   }
   s.badges ??= [];
   for(const child of ['aina','iara'] as Child[]){const rows=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));for(const threshold of [1,10,25,50,100])if(rows.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:rows[threshold-1].at});}
-  s.cycleRule ??= { day: 5, time: '18:00' };
+  s.cycleRule ??= { day: 1, time: '00:00' };
   s.cycles ??= [];
   if (!s.cycles.length) {
     const earliest = s.completions.map(effectiveAt).sort()[0] ?? now.toISOString();
@@ -66,7 +66,7 @@ export function settleCycles(s: State, now = new Date()) {
     open = { ...s.cycleRule, id: end, start: open.end, end };
     s.cycles.push(open);
   }
-  s.weekStart = (s.cycleRule.day + 1) % 7;
+  s.weekStart = 1;
   return s;
 }
-export function weekOrder(s: State) { return Array.from({ length: 7 }, (_, i) => ((s.cycleRule?.day ?? 5) + 1 + i) % 7); }
+export function weekOrder(s: State) { void s; return [1,2,3,4,5,6,0]; }

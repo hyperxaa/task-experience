@@ -36,13 +36,13 @@ export function settleWeeklyBonuses(state: State, now = new Date()) {
   state.weeklyPlans ??= [];
   state.weeklyBonuses ??= [];
   if (!state.weeklyPlans.some(plan => plan.week === currentWeek)) {
-    state.weeklyPlans.push({ week: currentWeek, startsOn: today, tasks: structuredClone(state.tasks.filter(task => task.status === 'approved' && !task.once)) });
+    state.weeklyPlans.push({ week: currentWeek, startsOn: state.weeklyPlans.length ? currentWeek : today, tasks: structuredClone(state.tasks.filter(task => task.status === 'approved' && !task.once)) });
   }
   const awards: WeeklyBonus[] = [];
   for (const plan of state.weeklyPlans) {
     const followingMonday = addDays(plan.week, 7);
-    if (followingMonday > today) continue;
-    const at = new Date(Date.parse(madridInstant(followingMonday, '00:00')) - 1).toISOString();
+    const closed = followingMonday <= today;
+    const closedAt = new Date(Date.parse(madridInstant(followingMonday, '00:00')) - 1).toISOString();
     for (const child of children) {
       const results = plan.tasks.filter(task => task.children.includes(child))
         .map(task => ({ task, ...taskResult(state, task, child, plan.week, plan.startsOn) }))
@@ -50,10 +50,12 @@ export function settleWeeklyBonuses(state: State, now = new Date()) {
       if (!results.length) continue;
       if (results.every(result => result.complete)) {
         const baseXp = results.reduce((sum, result) => sum + result.baseXp, 0);
-        awards.push({ id: `super-${plan.week}-${child}`, week: plan.week, child, kind: 'super', title: { es: 'Superbonus semanal', ca: 'Superbonus setmanal', en: 'Weekly super bonus' }, baseXp, xp: baseXp * 4, at });
+        const id = `super-${plan.week}-${child}`;
+        awards.push({ id, week: plan.week, child, kind: 'super', title: { es: 'Superbonus semanal', ca: 'Superbonus setmanal', en: 'Weekly super bonus' }, baseXp, xp: baseXp * 4, at: state.weeklyBonuses.find(b => b.id === id)?.at ?? (closed ? closedAt : now.toISOString()) });
       } else {
         for (const result of results.filter(result => result.complete)) {
-          awards.push({ id: `bonus-${plan.week}-${child}-${result.task.id}`, week: plan.week, child, kind: 'task', taskId: result.task.id, title: result.task.title, baseXp: result.baseXp, xp: result.baseXp, at });
+          const id = `bonus-${plan.week}-${child}-${result.task.id}`;
+          awards.push({ id, week: plan.week, child, kind: 'task', taskId: result.task.id, title: result.task.title, baseXp: result.baseXp, xp: result.baseXp, at: state.weeklyBonuses.find(b => b.id === id)?.at ?? (closed ? closedAt : now.toISOString()) });
         }
       }
     }

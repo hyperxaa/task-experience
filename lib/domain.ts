@@ -1,4 +1,4 @@
-import { settleCycles, nextClose, cycleSummary, madridInstant, type Cycle, type CycleRule } from './cycles.ts';
+import { settleCycles, cycleSummary, madridInstant, type Cycle, type CycleRule } from './cycles.ts';
 import { settleWeeklyBonuses, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
 export type Lang = 'es' | 'ca' | 'en';
 export type Child = 'aina' | 'iara';
@@ -12,7 +12,7 @@ export type Completion = { id: string; taskId: string; child: Child; title: stri
 export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
-export type State = { version: 1; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
+export type State = { version: 1; rulesVersion?: 2; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
 export type Action = { type: string; requestId: string; [key: string]: unknown };
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
@@ -20,7 +20,23 @@ export const isParent = (p: Person | null | undefined) => p === 'xavi' || p === 
 export const words = (x: string | Words, lang: Lang = 'es') => typeof x === 'string' ? x : x[lang];
 export const dateInMadrid = (date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 export function shiftDay(day: string, n: number) { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
-export function weekBeginning(day: string, start = 5) { const n = new Date(day + 'T12:00:00Z').getUTCDay(); return shiftDay(day, -((n - start + 7) % 7)); }
+export function weekBeginning(day: string, start = 1) { const n = new Date(day + 'T12:00:00Z').getUTCDay(); return shiftDay(day, -((n - start + 7) % 7)); }
+export function migrateState(s: State): State {
+  if (s.rulesVersion === 2) return s;
+  const reward = s.rewards.find(r => r.id === 'friend-sleepover');
+  if (reward) {
+    reward.xp = 1500;
+    reward.requiresSuperBonus = false;
+    reward.description = w('Cuesta 1500 Xp. Puedes ahorrar o conseguir una semana perfecta. Los padres confirman la fecha.', 'Costa 1500 Xp. Pots estalviar o aconseguir una setmana perfecta. Els pares confirmen la data.', 'Costs 1500 Xp. Save up or earn a perfect week. Parents confirm the date.');
+  }
+  const oldIds = (s.weeklyBonuses ?? []).map(b => b.id);
+  s.seenCelebrations = { aina: [...oldIds], iara: [...oldIds], xavi: [...oldIds], mireia: [...oldIds] };
+  s.cycleRule = { day: 1, time: '00:00' };
+  s.weekStart = 1;
+  s.cycles = [];
+  s.rulesVersion = 2;
+  return s;
+}
 export function totals(s: State, child: Child, today = dateInMadrid()) {
   const valid = s.completions.filter(x => x.child === child && !x.reversed);
   const bonuses = s.weeklyBonuses?.filter(x => x.child === child) ?? [];
@@ -60,10 +76,10 @@ export function initialState(now = new Date().toISOString()): State {
   const sleepover: Reward = {
     id: 'friend-sleepover',
     title: w('Traer una amiga a dormir el fin de semana', 'Convidar una amiga a dormir el cap de setmana', 'Invite a friend for a weekend sleepover'),
-    description: w('Se desbloquea al conseguir el superbonus semanal. Los padres confirman la fecha.', 'Es desbloqueja en aconseguir el superbonus setmanal. Els pares confirmen la data.', 'Unlocks with a weekly super bonus. Parents confirm the date.'),
-    xp: 0, requiresSuperBonus: true, children: ['aina', 'iara'], status: 'approved', author: 'xavi', note: '', icon: 'bed', limit: 99, created: now,
+    description: w('Cuesta 1500 Xp. Puedes ahorrar o conseguir una semana perfecta. Los padres confirman la fecha.', 'Costa 1500 Xp. Pots estalviar o aconseguir una setmana perfecta. Els pares confirmen la data.', 'Costs 1500 Xp. Save up or earn a perfect week. Parents confirm the date.'),
+    xp: 1500, children: ['aina', 'iara'], status: 'approved', author: 'xavi', note: '', icon: 'bed', limit: 99, created: now,
   };
-  return { version: 1, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], preferences: { aina: {lang:'es',goal:null}, iara:{lang:'es',goal:null}, xavi:{lang:'es',goal:null}, mireia:{lang:'es',goal:null} }, weekStart:5, processed:[], audit:[] };
+  return { version: 1, rulesVersion: 2, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], seenCelebrations: {}, preferences: { aina: {lang:'es',goal:null}, iara:{lang:'es',goal:null}, xavi:{lang:'es',goal:null}, mireia:{lang:'es',goal:null} }, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
 }
 function requireThat(value: unknown, code = 'invalid') { if (!value) throw new DomainError(code); }
 function text(v: unknown, max = 160) { requireThat(typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max); return (v as string).trim(); }
@@ -75,7 +91,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   requireThat(Object.hasOwn(names,actor),'forbidden');
   requireThat(typeof a.requestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(a.requestId));
   if(original.processed.includes(a.requestId)) return original;
-  const s: State = settleCycles(settleWeeklyBonuses(structuredClone(original),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor);
+  const s: State = settleCycles(settleWeeklyBonuses(migrateState(structuredClone(original)),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor);
   const requireParent = () => requireThat(parent,'forbidden');
   const childFor = (): Child => { const c = a.child; requireThat(c==='aina'||c==='iara'); requireThat(parent||c===actor,'forbidden'); return c as Child; };
   let log = a.type;
@@ -153,10 +169,14 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     requireParent(); const child=childFor(); const from=dayValue(a.from); const to=dayValue(a.to); requireThat(from<=to&&to>=today); const reason=text(a.reason,200);
     s.pauses.push({id:a.requestId,child,from,to,reason});log=reason;
   } else if(a.type === 'unpause') { requireParent(); const p=s.pauses.find(p=>p.id===a.id&&!p.cancelledAt); requireThat(p,'missing');p!.cancelledAt=at;
+  } else if(a.type === 'celebrationSeen') {
+    const child=childFor(); const ids=a.ids;
+    requireThat(Array.isArray(ids)&&ids.length>0&&ids.length<=30&&ids.every(id=>typeof id==='string'&&s.weeklyBonuses?.some(b=>b.id===id&&b.child===child)),'missing');
+    s.seenCelebrations ??= {}; s.seenCelebrations[actor] ??= [];
+    for(const id of ids as string[])if(!s.seenCelebrations[actor]!.includes(id)) s.seenCelebrations[actor]!.push(id);
+    log='Celebración vista';
   } else if(a.type === 'cycleSettings' || a.type === 'weekStart') {
-    requireParent(); const day=a.type==='weekStart'?(integer(a.value,0,6)+6)%7:integer(a.day,0,6); const time=a.type==='weekStart'?'18:00':text(a.time,5);
-    requireThat(/^([01]\d|2[0-3]):[0-5]\d$/.test(time));s.cycleRule={day,time};s.weekStart=(day+1)%7;
-    const open=s.cycles!.at(-1)!; open.day=day;open.time=time;open.end=nextClose(now,s.cycleRule);open.id=open.end;log=`Cierre ${day} ${time} Europe/Madrid`;
+    requireParent(); throw new DomainError('invalid');
   } else if(a.type === 'undo') {
     const change=s.changes?.find(c=>c.id===a.id);requireThat(change&&!change.undoneBy,'already');requireThat(parent||change!.actor===actor,'forbidden');
     const list=s[change!.collection] as (Task|Reward|Pause|Redemption)[];const current=list.find(x=>x.id===change!.key);
@@ -175,11 +195,11 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   s.badges ??= [];
   for(const child of ['aina','iara'] as Child[])for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
   s.processed.push(a.requestId);
-  if(a.type!=='preference') s.audit.push({at,actor,action:a.type,title:log});
+  if(a.type!=='preference'&&a.type!=='celebrationSeen') s.audit.push({at,actor,action:a.type,title:log});
   return s;
 }
 export function visibleState(s: State, p: Person): State {
   if(isParent(p)) return {...s,processed:[]};
   const child=p as Child;
-  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
+  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),seenCelebrations:{[p]:s.seenCelebrations?.[p]??[]},changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
 }
