@@ -34,12 +34,17 @@ const weeklyBonuses = moduleUrl(compile(readFileSync('lib/weekly-bonuses.ts', 'u
 const domain = moduleUrl(compile(readFileSync('lib/domain.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './weekly-bonuses.ts'", `from '${weeklyBonuses}'`));
 const require = createRequire(import.meta.url);
 const argon2Url = pathToFileURL(require.resolve('argon2')).href;
+const zodUrl = pathToFileURL(require.resolve('zod')).href;
+const stateImport = moduleUrl(compile(readFileSync('lib/state-import.ts', 'utf8'))
+  .replace("from 'zod'", `from '${zodUrl}'`)
+  .replace("from './domain'", `from '${domain}'`));
 let serverSource = compile(readFileSync('lib/server.ts', 'utf8'))
   .replace("import { getDatabase } from '../db';", 'const getDatabase=()=>globalThis.__taskXpTestDB;')
   .replace("from 'argon2'", `from '${argon2Url}'`)
   .replace("from './domain'", `from '${domain}'`)
   .replace("from './cycles'", `from '${cycles}'`)
   .replace("from './weekly-bonuses'", `from '${weeklyBonuses}'`);
+serverSource = serverSource.replace("from './state-import'", `from '${stateImport}'`);
 const { handle } = await import(moduleUrl(serverSource));
 
 const jar = new Map();
@@ -168,4 +173,25 @@ test('legacy plaintext pending animal codes are encrypted on first read', async 
   assert.equal(JSON.stringify(upgraded).includes(codes.aina.join('.')), false);
   const login = await request({ op: 'login', password, remember: false });
   assert.deepEqual(login.data.animalCodes, codes);
+});
+
+test('parent JSON backup restores progress but keeps credentials; reset requires explicit confirmation', async () => {
+  assert.ok([401,403].includes((await request({ op:'import', backup:{} })).status));
+  assert.equal((await request({ op:'login', password, remember:false })).status,200);
+  assert.equal((await request({ op:'unlock', code:codes.xavi.join('.') })).status,200);
+  const credentials=sql.prepare('SELECT credentials FROM family').get().credentials;
+  const added=await request({op:'action',action:{type:'complete',requestId:'backup-test-01',child:'aina',taskId:'bed'}});
+  assert.equal(added.status,200);
+  const backup=(await request({op:'export'})).data;
+  assert.equal(backup.data.completions.some(c=>c.id==='backup-test-01'),true);
+  assert.equal((await request({op:'import',backup:{...backup,data:{...backup.data,version:99}}})).status,400);
+  assert.equal((await request({op:'resetAll',confirm:'wrong'})).status,400);
+  const reset=await request({op:'resetAll',confirm:'RESTABLECER'});
+  assert.equal(reset.status,200);
+  assert.equal(reset.data.state.completions.length,0);
+  assert.equal(sql.prepare('SELECT credentials FROM family').get().credentials,credentials);
+  const restored=await request({op:'import',backup});
+  assert.equal(restored.status,200);
+  assert.equal(restored.data.state.completions.some(c=>c.id==='backup-test-01'),true);
+  assert.equal(sql.prepare('SELECT credentials FROM family').get().credentials,credentials);
 });

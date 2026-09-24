@@ -39,14 +39,15 @@ export function XPHouse({lang='es',onDiscover}:{lang?:Lang;onDiscover?:()=>void}
       <path d="M145 112H384V303H145Z" fill="#273240"/>
       <path d="M258 303H384V403H258Z" fill="#273738"/>
       <path d="M25 405H98V520H25ZM284 405H384V505H284Z" fill="#263442"/>
+      <path d="M204 405H284V520H204Z" fill="#303343"/>
       <path d="M25 520H140V640H25Z" fill="#21413f"/>
       <path d="M140 520H256V640H140Z" fill="#382d48"/>
       <path d="M256 505H384V640H256Z" fill="#303343"/>
       <path d="M145 28H384V640H25V405H78V350H145Z" fill="url(#floorboards)"/>
       <path d="M25 405H98V520H25ZM284 405H384V505H284ZM258 303H384V403H258Z" fill="url(#tiles)"/>
-      <g className="plan-walls" fill="none" stroke="#69838b" strokeWidth="4"><path d="M145 112H181M213 112H281M325 112H384M258 303H384M258 303V349M145 112V351H78V405H98V444M98 476V520M25 520H102M130 520H168M196 520H256M140 520V640M256 505H284M314 505H384M256 505V640M284 405V446M284 476V505M98 405H175M204 405H384M258 378V405"/></g>
+      <g className="plan-walls" fill="none" stroke="#69838b" strokeWidth="4"><path d="M145 112H181M213 112H281M325 112H384M258 303H384M258 303V349M145 112V351H78V405H98V444M98 476V520M25 520H102M130 520H168M196 520H256M140 520V640M256 520V640M284 505H384M284 405V446M284 476V505M98 405H145M174 405H384M204 405V445M204 474V520M258 378V405"/></g>
       <g stroke="#94bebd" strokeWidth="2" opacity=".8"><path d="M151 32H378M29 640H126M151 640H242M275 640H375M384 142V252"/></g>
-      <g className="plan-doors" stroke="#70938f" fill="none" strokeWidth="1" strokeDasharray="3 3"><path d="M281 112V142Q325 142 325 112M102 520V550Q130 550 130 520M168 520V548Q196 548 196 520M175 405V434Q204 434 204 405M98 444H66Q66 476 98 476M284 446H315Q315 476 284 476M258 349H288Q288 378 258 378"/></g>
+      <g className="plan-doors" stroke="#70938f" fill="none" strokeWidth="1" strokeDasharray="3 3"><path d="M281 112V142Q325 142 325 112M102 520V550Q130 550 130 520M168 520V548Q196 548 196 520M145 405V434Q174 434 174 405M204 445H233Q233 474 204 474M98 444H66Q66 476 98 476M284 446H315Q315 476 284 476M258 349H288Q288 378 258 378"/></g>
       <g className="plan-furniture" stroke="#8296a6" strokeWidth="1.5">
         <rect x="177" y="49" width="32" height="39" rx="7" fill="#4b6560" transform="rotate(25 193 68)"/><circle cx="323" cy="71" r="22" fill="#53615e"/><circle cx="352" cy="71" r="6" fill="#72806b"/><circle cx="294" cy="71" r="6" fill="#72806b"/>
         <rect x="335" y="148" width="35" height="125" rx="7" fill="#526077"/><path d="M335 189H370M335 230H370"/><rect x="253" y="248" width="82" height="30" rx="5" fill="#526077"/><rect x="263" y="186" width="49" height="48" rx="5" fill="#6d6664"/>

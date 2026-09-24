@@ -22,9 +22,9 @@ export function BonusCelebration({ bonuses, lang, reward, balance, onClose, onRe
       <span className="bonus-kicker"><Sparkles size={16}/>{superBonus ? t('SEMANA PERFECTA','SETMANA PERFECTA','PERFECT WEEK') : t('BONUS DE MISIÓN','BONUS DE MISSIÓ','MISSION BONUS')}</span>
       <h2>{superBonus ? t('¡Superbonus ×5!','Superbonus ×5!','Super bonus ×5!') : t('¡Lo has conseguido!','Ho has aconseguit!','You did it!')}</h2>
       <p>{superBonus ? t('Todas las misiones de la semana, hechas.','Totes les missions de la setmana, fetes.','Every mission this week is done.') : bonuses.map(b=>words(b.title,lang)).join(' · ')}</p>
-      <strong className="bonus-total">+{xp} <small>XP {t('extra','extra','extra')}</small></strong>
-      {superBonus && reward && <div className="bonus-prize"><Gift size={21}/><span><b>{words(reward.title,lang)}</b><small>{reward.xp} XP · {ready?t('Ya está a tu alcance','Ja és al teu abast','Ready to request'):`${Math.max(0,reward.xp-balance)} XP ${t('para llegar','per arribar','to go')}`}</small></span></div>}
-      {superBonus && reward && ready && <button className="bonus-redeem" onClick={onRedeem}>{t(`Solicitar por ${reward.xp} XP`,`Demanar per ${reward.xp} XP`,`Request for ${reward.xp} XP`)}</button>}
+      <strong className="bonus-total">+{xp} <small>Xp {t('extra','extra','extra')}</small></strong>
+      {superBonus && reward && <div className="bonus-prize"><Gift size={21}/><span><b>{words(reward.title,lang)}</b><small>{reward.xp} Xp · {ready?t('Ya está a tu alcance','Ja és al teu abast','Ready to request'):`${Math.max(0,reward.xp-balance)} Xp ${t('para llegar','per arribar','to go')}`}</small></span></div>}
+      {superBonus && reward && ready && <button className="bonus-redeem" onClick={onRedeem}>{t(`Solicitar por ${reward.xp} Xp`,`Demanar per ${reward.xp} Xp`,`Request for ${reward.xp} Xp`)}</button>}
       <button className="bonus-continue" onClick={onClose}>{t('Seguir jugando','Continuar jugant','Keep playing')}</button>
     </section>
   </div>;

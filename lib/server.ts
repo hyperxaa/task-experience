@@ -5,6 +5,7 @@ import { getDatabase, type BoundStatement } from '../db';
 import { applyAction, initialState, migrateState, visibleState, isParent, names, DomainError, type Person, type State, type Action } from './domain';
 import { settleWeeklyBonuses } from './weekly-bonuses';
 import { settleCycles } from './cycles';
+import { parseExportedState } from './state-import';
 
 type Stored = { id: number; revision: number; data: string; credentials: string };
 type Session = { token: string; profile: Person | null; expires: number; parent_until: number; remember_token: string | null };
@@ -219,11 +220,12 @@ export async function handle(request: Request) {
     if (request.method === 'GET') return reply(row ? responseState(row, session) : { initialized: false, localSetup: setupAllowed(request) });
     checkOrigin(request);
     const raw = await request.text();
-    if (raw.length > 16000) return reply({ error: 'invalid' }, 413);
+    if (raw.length > 4_000_000) return reply({ error: 'invalid' }, 413);
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw); } catch { return reply({ error: 'invalid' }, 400); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DomainError('invalid');
     const op = body.op;
+    if (op !== 'import' && raw.length > 16000) return reply({ error: 'invalid' }, 413);
     const ip = process.env.TASK_XP_TRUST_PROXY === 'true' ? request.headers.get('x-real-ip') ?? 'unknown' : 'local';
     if (op === 'setup') {
       if (row) throw new DomainError('already');
@@ -313,6 +315,15 @@ export async function handle(request: Request) {
     if (op === 'export') {
       if (!isParent(session.profile)) throw new DomainError('forbidden');
       return reply({ exportedAt: new Date().toISOString(), data: JSON.parse(row.data) });
+    }
+    if (op === 'import' || op === 'resetAll') {
+      if (!isParent(session.profile)) throw new DomainError('forbidden');
+      if (op === 'resetAll' && body.confirm !== 'RESTABLECER') throw new DomainError('invalid');
+      const next = op === 'import' ? parseExportedState(body.backup) : initialState();
+      const data = JSON.stringify(settleCycles(settleWeeklyBonuses(next)));
+      const result = await db().prepare('UPDATE family SET data = ?, revision = revision + 1 WHERE id = 1 AND revision = ?').bind(data, row.revision).run();
+      if (!result.meta.changes) return reply({ error: 'conflict' }, 409);
+      return reply({ ok: true, state: visibleState(JSON.parse(data), session.profile) });
     }
     if (op !== 'action' || !body.action || typeof body.action !== 'object') throw new DomainError('invalid');
     for (let retry = 0; retry < 5; retry++) {

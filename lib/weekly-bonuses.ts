@@ -61,5 +61,7 @@ export function settleWeeklyBonuses(state: State, now = new Date()) {
     }
   }
   state.weeklyBonuses = awards;
+  const activeIds = new Set(awards.map(award => award.id));
+  for (const seen of Object.values(state.seenCelebrations ?? {})) if (seen) seen.splice(0, seen.length, ...seen.filter(id => activeIds.has(id)));
   return state;
 }

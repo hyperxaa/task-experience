@@ -1,4 +1,4 @@
-import { shiftDay, totals, type Child, type State } from '@/lib/domain';
+import { shiftDay, type Child, type State } from '@/lib/domain';
 
 export type EggSignals = { tabs: number; logo: number; phrases: number; house: number };
 

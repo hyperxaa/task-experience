@@ -1,4 +1,4 @@
-import { settleCycles, cycleSummary, madridInstant, type Cycle, type CycleRule } from './cycles.ts';
+import { settleCycles, cycleSummary, madridInstant, nextClose, type Cycle, type CycleRule } from './cycles.ts';
 import { settleWeeklyBonuses, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
 export type Lang = 'es' | 'ca' | 'en';
 export type Child = 'aina' | 'iara';
@@ -17,7 +17,15 @@ export type Action = { type: string; requestId: string; [key: string]: unknown }
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
 export const isParent = (p: Person | null | undefined) => p === 'xavi' || p === 'mireia';
-export const words = (x: string | Words, lang: Lang = 'es') => typeof x === 'string' ? x : x[lang];
+const olderKidsCopy:Record<string,string>={
+  'Escuchar el audio o hacer las tareas de la app.':'Escuchar el audio o hacer las actividades de la app.',
+  'Escoltar l’àudio o fer les tasques de l’app.':'Escoltar l’àudio o fer les activitats de l’app.',
+  'Listen to the audio or do the tasks in the app.':'Listen to the audio or do the activities in the app.',
+};
+export const words = (x: string | Words, lang: Lang = 'es') => {
+  const value=typeof x === 'string' ? x : x[lang];
+  return olderKidsCopy[value]??value;
+};
 export const dateInMadrid = (date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 export function shiftDay(day: string, n: number) { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 export function weekBeginning(day: string, start = 1) { const n = new Date(day + 'T12:00:00Z').getUTCDay(); return shiftDay(day, -((n - start + 7) % 7)); }
@@ -63,7 +71,7 @@ export function initialState(now = new Date().toISOString()): State {
     daily('table',w('Preparar la mesa para cenar','Parar taula per sopar','Set the table for dinner'),w('Dejar la mesa lista para la cena.','Deixar la taula preparada per sopar.','Get the table ready for dinner.'),2,'evening','utensils',{children:['iara'],days:[1,2,3,4,5]}),
     daily('clear-table',w('Recoger la mesa de la cena','Desparar taula després de sopar','Clear the dinner table'),w('Recoger la mesa después de cenar.','Desparar taula després de sopar.','Clear the table after dinner.'),2,'evening','utensils',{children:['aina'],days:[1,2,3,4,5]}),
     daily('teeth',w('Lavar los dientes','Rentar-me les dents','Brush my teeth'),w('Cepillar los dientes por la mañana y por la noche.','Rentar-me les dents al matí i a la nit.','Brush my teeth in the morning and at night.'),2,'all-day','shower',{limit:2}),
-    daily('kids-us',w('Kids&Us Homework','Deures de Kids&Us','Kids&Us Homework'),w('Escuchar el audio o hacer las tareas de la app.','Escoltar l’àudio o fer les tasques de l’app.','Listen to the audio or do the tasks in the app.'),5,'afternoon','book',{days:[1,2,3,4,5]}),
+    daily('kids-us',w('Kids&Us Homework','Deures de Kids&Us','Kids&Us Homework'),w('Escuchar el audio o hacer las actividades de la app.','Escoltar l’àudio o fer les activitats de l’app.','Listen to the audio or do the activities in the app.'),5,'afternoon','book',{days:[1,2,3,4,5]}),
     daily('plan',w('Organizar mi día','Organitzar el meu dia','Plan my day'),w('Revisar mi lista y elegir por dónde empezar.','Revisar la meva llista i triar per on començar.','Check my list and choose where to start.'),5,'morning','list'),
     daily('shower',w('Mi rutina de ducha','La meva rutina de dutxa','My shower routine'),w('Seguir los pasos de higiene que hemos aprendido. Pedir ayuda está bien.','Seguir els passos d’higiene que hem après. Demanar ajuda està bé.','Follow the hygiene steps we have learned. It is okay to ask for help.'),10,'evening','shower'),
     daily('bag',w('Mochila del cole','Motxilla de l’escola','School bag'),w('Preparar y revisar lo que necesito para mañana.','Preparar i revisar el que necessito per demà.','Pack and check what I need for tomorrow.'),5,'evening','backpack',{days:[0,1,2,3,4]}),
@@ -87,6 +95,13 @@ function optional(v: unknown, max = 1000) { if (v === undefined || v === '') ret
 function integer(v: unknown, min: number, max: number) { requireThat(Number.isInteger(v) && Number(v) >= min && Number(v) <= max); return Number(v); }
 function children(v: unknown): Child[] { requireThat(Array.isArray(v) && v.length > 0 && v.length <= 2 && v.every(x => x==='aina'||x==='iara')); return [...new Set(v as Child[])]; }
 function dayValue(v: unknown) { const d = text(v,10); requireThat(/^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d+'T12:00:00Z')) && new Date(d+'T12:00:00Z').toISOString().slice(0,10) === d); return d; }
+function periodBounds(scope: unknown, value: unknown, today: string): [string,string] {
+  const day = dayValue(value); requireThat(day <= today);
+  if (scope === 'day') return [day,day];
+  if (scope === 'week') { const start = weekBeginning(day,1); return [start,shiftDay(start,6)]; }
+  if (scope === 'month') { const start = day.slice(0,7)+'-01'; return [start,shiftDay(new Date(Date.UTC(+day.slice(0,4),+day.slice(5,7),1,12)).toISOString().slice(0,10),-1)]; }
+  throw new DomainError('invalid');
+}
 export function applyAction(original: State, actor: Person, a: Action, now = new Date()): State {
   requireThat(Object.hasOwn(names,actor),'forbidden');
   requireThat(typeof a.requestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(a.requestId));
@@ -118,7 +133,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
       if(c!.reversed&&target>0){const task=s.tasks.find(t=>t.id===c!.taskId);requireThat(task&&completed(s,task,c!.child,c!.day)<task.limit,'already');}
     } else {
       requireThat(!c!.reversed,'already');
-      if(a.type==='reverse'){const amount=a.amount===undefined?c!.xp:integer(a.amount,1,c!.xp);target=c!.xp-amount;reason=text(a.reason,300);}
+      if(a.type==='reverse'){const amount=a.amount===undefined?c!.xp:integer(a.amount,1,c!.xp);target=c!.xp-amount;reason=optional(a.reason,300);}
     }
     c!.adjustments.push({id:a.requestId,at,actor,from:c!.reversed?0:c!.xp,to:target,reason,undoOf});
     c!.xp=target;c!.reversed=target===0;c!.reason=reason;c!.correctedBy=actor;log=words(c!.title);
@@ -175,7 +190,47 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     s.seenCelebrations ??= {}; s.seenCelebrations[actor] ??= [];
     for(const id of ids as string[])if(!s.seenCelebrations[actor]!.includes(id)) s.seenCelebrations[actor]!.push(id);
     log='Celebración vista';
-  } else if(a.type === 'cycleSettings' || a.type === 'weekStart') {
+  } else if(a.type === 'cycleSettings') {
+    requireParent(); const endDay=integer(a.endDay,0,6), closeDay=(endDay+1)%7;
+    s.cycleRule={day:closeDay,time:'00:00'};
+    const open=s.cycles?.at(-1);
+    if(open&&!open.closed){const end=nextClose(now,s.cycleRule);Object.assign(open,{...s.cycleRule,id:end,end});}
+    log='Día de cierre del ciclo';
+  } else if(a.type === 'bulkResetXp' || a.type === 'undoChildPeriod') {
+    requireParent(); const child=childFor(); const [from,to]=periodBounds(a.scope,a.day,today);
+    const reason=a.type==='bulkResetXp'?'Restablecimiento de Xp del periodo':'Deshacer actividad del periodo';
+    let affected=0;
+    for(const c of s.completions){
+      const selected=c.child===child&&c.xp>0&&(a.type==='bulkResetXp'?c.day>=from&&c.day<=to:c.actor===child&&!c.adjustments?.some(adjustment=>isParent(adjustment.actor))&&dateInMadrid(new Date(c.at))>=from&&dateInMadrid(new Date(c.at))<=to);
+      if(!selected)continue;
+      c.originalXP ??= c.xp;c.adjustments ??=[];
+      c.adjustments.push({id:`${a.requestId}-${c.id}`,at,actor,from:c.xp,to:0,reason});
+      c.xp=0;c.reversed=true;c.reason=reason;c.correctedBy=actor;
+      affected++;
+    }
+    if(a.type==='undoChildPeriod')for(const change of [...(s.changes??[])].reverse()){
+      if(change.actor!==child||change.undoneBy||dateInMadrid(new Date(change.at))<from||dateInMadrid(new Date(change.at))>to)continue;
+      const list=s[change.collection] as (Task|Reward|Pause|Redemption)[];
+      const current=list.find(item=>item.id===change.key);
+      if(JSON.stringify(current)!==JSON.stringify(change.after))continue;
+      if(change.collection==='tasks'&&s.completions.some(c=>c.taskId===change.key))continue;
+      if(change.collection==='rewards'&&s.redemptions.some(r=>r.rewardId===change.key))continue;
+      if(change.collection==='redemptions'&&change.before){
+        const previous=change.before as Redemption;
+        if(previous.status!=='cancelled'&&(current as Redemption)?.status==='cancelled'){
+          const reward=s.rewards.find(r=>r.id===previous.rewardId);
+          if(totals(s,previous.child).balance<previous.xp||!reward||s.redemptions.filter(r=>r.rewardId===previous.rewardId&&r.child===previous.child&&r.status!=='cancelled').length>=reward.limit)continue;
+        }
+      }
+      const restored=list.filter(item=>item.id!==change.key);
+      if(change.before)restored.push(structuredClone(change.before));
+      (s as unknown as Record<string,unknown>)[change.collection]=restored;
+      change.undoneBy=a.requestId;
+      affected++;
+    }
+    requireThat(affected>0,'nothingToUndo');
+    log=`${reason}: ${names[child]} · ${from} — ${to}`;
+  } else if(a.type === 'weekStart') {
     requireParent(); throw new DomainError('invalid');
   } else if(a.type === 'undo') {
     const change=s.changes?.find(c=>c.id===a.id);requireThat(change&&!change.undoneBy,'already');requireThat(parent||change!.actor===actor,'forbidden');
