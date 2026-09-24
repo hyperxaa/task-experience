@@ -1,4 +1,7 @@
 // Explicit local maintenance. Never exposes a reset endpoint in the app.
+if (process.env.NODE_ENV !== 'development') {
+  throw new Error('This legacy Wrangler reset helper is development-only; set NODE_ENV=development. It does not target the production SQLite database.');
+}
 import { DatabaseSync } from 'node:sqlite';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';

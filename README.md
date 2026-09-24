@@ -1,42 +1,210 @@
 # Task eXperience
 
-Aplicación familiar para convertir tareas y responsabilidades en progreso visible, sin rankings ni penalizaciones. Aina e Iara completan misiones, ganan Xp, proponen tareas y premios; Xavi y Mireia revisan propuestas, asignan precios, corrigen registros y gestionan descansos. El saldo de Xp no caduca.
+Aplicación familiar para convertir tareas y responsabilidades en progreso visible, sin rankings ni penalizaciones. Aina e Iara completan misiones, ganan Xp y proponen tareas y premios; Xavi y Mireia revisan propuestas, asignan precios y gestionan descansos. La interfaz es responsive, usa tema oscuro por defecto, incluye castellano, catalán e inglés, historial, rachas, logros, una casa animada y entrada por voz del navegador. La voz pide confirmación antes de registrar una tarea y no envía audio a un LLM.
 
-La interfaz es responsive, tiene tema oscuro por defecto y puede instalarse como aplicación web en dispositivos compatibles. Incluye castellano, catalán e inglés, historial de progreso, rachas, logros, una casa animada y pequeñas sorpresas ocultas. La entrada por voz usa el reconocimiento del navegador cuando está disponible y pide confirmación antes de registrar una tarea; no usa un LLM ni requiere una clave de API.
+Esta rama sustituye el runtime de Cloudflare por **Next.js sobre Node.js**, **SQLite local** y autenticación propia. La interfaz y la lógica de dominio se mantienen. El Site publicado en ChatGPT Sites sigue siendo un despliegue aparte y no cambia al trabajar en esta rama.
 
-## Sitio en Sites
+## Stack y persistencia
 
-- **URL publicada:** [Task eXperience](https://task-experience.hyper-xaa.chatgpt.site/).
-- **Acceso actual:** público en Sites; cualquiera con el enlace puede abrir la pantalla inicial. Para acceder a los perfiles siguen haciendo falta la contraseña familiar y la combinación de animales correspondiente. La visibilidad del Site se gestiona en Sites y es independiente del acceso interno de la aplicación.
-- **Datos:** el Site usa su propia base Cloudflare D1, declarada como `DB` en [`.openai/hosting.json`](.openai/hosting.json). La base publicada se creó vacía: los Xp, tareas e historial del entorno local **no se migraron ni se sincronizan automáticamente**. La aplicación permite exportar datos a JSON desde un perfil parental, pero todavía no dispone de importación.
-- **Primer acceso:** el propietario crea una contraseña familiar y utiliza el código de configuración del alojamiento. Este código está guardado como secreto `TASK_XP_SETUP_TOKEN` en Sites; no debe añadirse al repositorio. Las combinaciones iniciales de cuatro animales se muestran una sola vez, por lo que hay que guardarlas.
+- Ubuntu 24.04 ARM64 en `erik`: Node.js 22.13 o posterior, Next.js en modo standalone, SQLite y `better-sqlite3`.
+- Ubuntu 24.04 x86_64 en `mark`: nginx termina TLS público y hace proxy HTTP por la LAN a `erik`.
+- No hay Docker, Cloudflare Workers ni D1 en el runtime de esta rama.
+- La base por defecto es `./data/taskxp.db`; en producción usa una ruta persistente como `/var/lib/taskxp/taskxp.db`, fuera del checkout.
+- SQLite activa WAL, `synchronous=NORMAL`, claves foráneas y `busy_timeout=5000`. La base debe vivir en disco local de `erik`, nunca en NFS/SMB o una carpeta compartida.
+- La API de dominio conserva una interfaz pequeña (`prepare/bind/first/run/batch`) para no reescribir toda su lógica de una vez; ahora la ejecuta `better-sqlite3`, sin binding D1. Drizzle también apunta a SQLite y mantiene las tablas de la app.
+- La instalación inicial empieza **vacía**, con contraseña familiar y combinaciones de animales nuevas. No se copian automáticamente los datos del Site publicado ni del Wrangler local.
 
-El ciclo cierra inicialmente los **viernes a las 18:00, hora de Madrid**. Los padres pueden cambiar el día y la hora en Objetivos; las vistas semanales se ordenan para que el cierre quede al final. Los Xp acumulados permanecen disponibles después del cierre.
+## Requisitos
+
+- Node.js 22.13+ y npm en la máquina ARM64 que compilará y ejecutará la app.
+- Herramientas de compilación (`python3`, `make`, `g++`) en `erik` por si npm necesita compilar el módulo nativo de SQLite.
+- nginx y certificados HTTPS públicos en `mark`.
+- Una IP LAN estable para `erik` y acceso de red desde `mark`.
+
+Instala las dependencias **en el servidor ARM64**. No copies `node_modules` ni `.next/standalone` desde Windows o desde una máquina x86_64: incluyen binarios nativos dependientes del sistema y la arquitectura.
 
 ## Desarrollo local
 
-Requiere Node.js 22.13 o posterior. Desde esta carpeta:
-
-```powershell
+```sh
 npm ci
-npm run dev -- --port 5191 --hostname 127.0.0.1
+npm run dev
 ```
 
-Abrir `http://127.0.0.1:5191/`. El desarrollo local usa una base D1 simulada en `.wrangler/state/`, separada de la base publicada. En una instalación local nueva, generar el Worker y aplicar la migración antes de utilizar la app:
+Abre <http://127.0.0.1:5191>. La base se crea al primer uso en `./data/taskxp.db`. En desarrollo, la primera visita desde localhost permite crear la familia sin token de despliegue. Para verificar el build de producción y las pruebas:
 
-```powershell
-npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_massive_bloodstorm.sql
-```
-
-La primera visita local permite crear la contraseña familiar sin código de alojamiento. Para restablecerla **solo en este equipo**, sin borrar tareas ni Xp, se puede ejecutar `node scripts/reset-local-password.mjs`. Ese comando no recupera ni modifica la contraseña del Site publicado.
-
-## Comprobaciones
-
-```powershell
-node node_modules/typescript/bin/tsc --noEmit
-node --test tests/access.test.mjs tests/domain.test.mjs tests/house-motion.test.mjs
+```sh
+npm run typecheck
+npm test
 npm run build
 ```
 
-El código de la interfaz está en `app/`; las reglas de tareas, saldo, permisos y ciclos en `lib/`; la API y la persistencia en `app/api/xp/route.ts` y `lib/server.ts`; y el esquema y las migraciones D1 en `db/` y `drizzle/`. Los cambios locales no se publican solos: deben compilarse y desplegarse como una nueva versión de Sites.
+## Despliegue en `erik` y `mark`
+
+### 1. Preparar `erik`
+
+Crea un usuario de sistema dedicado y directorios persistentes; ajusta la IP de `mark` y la ruta del repositorio a tu red:
+
+```sh
+sudo useradd --system --home /opt/taskxp --shell /usr/sbin/nologin taskxp
+sudo install -d -o taskxp -g taskxp -m 0750 /opt/taskxp /var/lib/taskxp
+sudo -u taskxp git clone --branch linux https://github.com/hyperxaa/task-experience.git /opt/taskxp
+cd /opt/taskxp
+npm ci
+```
+
+Si el repositorio ya está clonado, usa `git fetch origin && git switch linux && git pull --ff-only` en vez de clonar de nuevo.
+
+Crea `/opt/taskxp/.env.local`, propiedad de `taskxp`, permisos `0600`. Genera dos secretos diferentes con `openssl rand -hex 32` y rellena:
+
+```dotenv
+DATABASE_URL=/var/lib/taskxp/taskxp.db
+SESSION_SECRET=REEMPLAZAR_POR_64_CARACTERES_HEX_ALEATORIOS
+TASK_XP_SETUP_TOKEN=OTRO_SECRETO_HEX_ALEATORIO_DE_64_CARACTERES
+PUBLIC_ORIGIN=https://taskxp.example.net
+PORT=5191
+HOST=192.168.1.20
+TASK_XP_TRUST_PROXY=true
+NODE_ENV=production
+```
+
+`HOST` debe ser la IP LAN de `erik` (o `0.0.0.0`) para aceptar conexiones de `mark`. **`127.0.0.1` solo sirve si nginx está en el mismo servidor**; con `mark` separado, ese bind deja el proxy llamando a una puerta que solo existe en `erik`. Limita el puerto 5191 en el firewall de `erik` a la IP LAN de `mark`. El proxy debe sobrescribir `X-Real-IP`; no confíes ese encabezado desde otros clientes.
+
+`PUBLIC_ORIGIN` es el origen que verá el navegador, con esquema, host y puerto si aplica, sin ruta. Se usa para validar `Origin` y decidir el atributo `Secure` de las cookies. Si la app solo se ofrece por HTTP privado, configura el origen real `http://...`; para acceso por Internet publica HTTPS en nginx.
+
+`SESSION_SECRET` es un pepper de 32 bytes para proteger hashes Argon2id, sobre todo los códigos de animales que tienen menos combinaciones posibles que una contraseña. Se comprueba al crear o validar credenciales, así que consérvalo en las copias seguras: perderlo invalida las credenciales Argon2id. Los tokens de sesión/dispositivo se generan aleatoriamente, son opacos y SQLite solo guarda su SHA-256. `TASK_XP_SETUP_TOKEN` autoriza la creación inicial y no es la contraseña familiar. Ambos deben seguir fuera de Git y de logs.
+
+```sh
+sudo chown taskxp:taskxp /opt/taskxp/.env.local
+sudo chmod 0600 /opt/taskxp/.env.local
+sudo -u taskxp npm run build
+```
+
+El build produce `.next/standalone` para Node. Se construye en `erik` para que SQLite y Argon2 usen los binarios ARM64 correctos.
+
+### 2. Crear el servicio systemd en `erik`
+
+Guarda como `/etc/systemd/system/taskxp.service`:
+
+```ini
+[Unit]
+Description=Task eXperience
+After=network.target
+
+[Service]
+Type=simple
+User=taskxp
+Group=taskxp
+WorkingDirectory=/opt/taskxp
+EnvironmentFile=/opt/taskxp/.env.local
+ExecStart=/usr/bin/node /opt/taskxp/scripts/start.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/taskxp /opt/taskxp/.next
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Comprueba la ruta de Node con `command -v node`; si no es `/usr/bin/node`, usa la ruta de la instalación real (por ejemplo, la de NodeSource). Activa y revisa:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now taskxp
+sudo systemctl status taskxp
+journalctl -u taskxp -n 100 --no-pager
+curl -i http://127.0.0.1:5191/api/xp
+```
+
+El servicio crea SQLite al primer acceso. La respuesta inicial debe incluir `"initialized":false`.
+
+### 3. Cerrar el acceso de red en `erik`
+
+Permite 5191 solo desde `mark` (sustituye `192.168.1.10`):
+
+```sh
+sudo ufw allow from 192.168.1.10 to 192.168.1.20 port 5191 proto tcp
+sudo ufw status
+```
+
+No abras el 5191 a Internet. No ubiques el archivo SQLite en una unidad de red: WAL requiere almacenamiento local y fiable.
+
+### 4. Configurar nginx en `mark`
+
+Ejemplo para un virtual host HTTPS ya provisto de certificados. Sustituye el nombre, certificado e IP de `erik`:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name taskxp.example.net;
+
+    ssl_certificate     /etc/letsencrypt/live/taskxp.example.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/taskxp.example.net/privkey.pem;
+
+    location / {
+        proxy_pass http://192.168.1.20:5191;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+Valida y recarga: `sudo nginx -t && sudo systemctl reload nginx`. La conexión `mark` → `erik` va en HTTP plano como se ha pedido; credenciales, cookies y datos pueden observarse dentro de esa LAN. Mantén esa ruta en una red de confianza y con firewall restringido; si la red no es de confianza, usa una VPN o TLS entre servidores.
+
+## Primer acceso familiar
+
+Abre `https://taskxp.example.net`. En la pantalla inicial introduce la contraseña familiar (10–128 caracteres) y el token `TASK_XP_SETUP_TOKEN`. La app genera cuatro códigos distintos, cada uno con cuatro animales en orden, usando el catálogo que incluye el gato bengalí. Guárdalos en el gestor familiar de contraseñas: se muestran una vez y el servidor conserva únicamente hashes Argon2id.
+
+El setup token puede retirarse de `.env.local` y reiniciar el servicio después de crear la familia. La API rechaza nuevos setups una vez inicializada la base. La entrada de contraseña y la de los códigos tienen límites de intentos persistidos en SQLite.
+
+## Sesiones y credenciales
+
+- Contraseña familiar y códigos se guardan como Argon2id; los códigos nunca se guardan en claro tras revelarse por primera vez. Los valores PBKDF2 de instalaciones previas se verifican y se actualizan al iniciar sesión correctamente.
+- Cookie de sesión `HttpOnly`, `SameSite=Strict`, `Secure` cuando `PUBLIC_ORIGIN` usa HTTPS; caduca a las 12 horas. Los tokens son aleatorios y SQLite solo contiene su SHA-256.
+- «Recordar este dispositivo» crea otra cookie opaca, con vida máxima de un año. Se almacena el hash, se rota al recuperar una sesión caducada y se revoca al cerrar sesión. Cambiar la contraseña o códigos revoca los demás dispositivos.
+- Los perfiles parentales se bloquean tras 15 minutos; cada perfil se vuelve a seleccionar con su código.
+- La API valida `Origin` contra `PUBLIC_ORIGIN`, limita el tamaño del JSON y limita intentos por IP cuando `TASK_XP_TRUST_PROXY=true` y nginx sobrescribe `X-Real-IP`.
+- La primera instalación no incluye ninguna contraseña predeterminada, endpoint de login de ChatGPT ni mock de autenticación.
+
+## Actualizaciones y copias de seguridad
+
+Haz cada actualización desde `erik` y compila allí:
+
+```sh
+cd /opt/taskxp
+sudo -u taskxp git fetch origin
+sudo -u taskxp git switch linux
+sudo -u taskxp git pull --ff-only
+sudo -u taskxp npm ci
+sudo -u taskxp npm run typecheck
+sudo -u taskxp npm test
+sudo -u taskxp npm run build
+sudo systemctl restart taskxp
+sudo systemctl status taskxp
+```
+
+Antes de actualizar SQLite o la app, toma una copia consistente. La forma más sencilla es detener el servicio y copiar el archivo principal; al cerrar la conexión, SQLite consolida WAL:
+
+```sh
+sudo systemctl stop taskxp
+sudo install -d -o taskxp -g taskxp -m 0700 /var/lib/taskxp/backups
+sudo install -o taskxp -g taskxp -m 0600 /var/lib/taskxp/taskxp.db \
+  "/var/lib/taskxp/backups/taskxp-$(date +%F-%H%M%S).db"
+sudo systemctl start taskxp
+```
+
+Crea antes `/var/lib/taskxp/backups` con propietario `taskxp` y permisos `0700`. También puedes automatizar una copia diaria, conservar copias fuera de `erik` y ensayar restauraciones. La exportación desde la aplicación solo contiene el estado de tareas, progreso y premios; no incluye credenciales ni sesiones, y no sustituye a la copia SQLite.
+
+## Desarrollo y legado de Cloudflare
+
+La base D1 del Site publicado y la D1 local de Wrangler son independientes. Esta rama no modifica ni sincroniza el Site. La nueva SQLite arranca vacía por elección; el JSON exportado previamente no se importa automáticamente porque no contiene credenciales. Para cualquier importación futura, valida primero el estado y establece contraseña y códigos nuevos.
+
+`scripts/reset-local-password.mjs` es una utilidad heredada solo para desarrollo. Se niega a ejecutarse con `NODE_ENV=production` y no forma parte del bundle standalone. No es una herramienta de restablecimiento para la SQLite de producción.

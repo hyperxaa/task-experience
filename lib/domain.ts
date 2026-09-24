@@ -4,7 +4,7 @@ export type Child = 'aina' | 'iara';
 export type Person = Child | 'xavi' | 'mireia';
 export type Status = 'pending' | 'changes' | 'approved' | 'archived';
 export type Words = { es: string; ca: string; en: string };
-export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; status: Status; author: Person; note: string; icon: string; created: string };
+export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; status: Status; author: Person; note: string; icon: string; created: string };
 export type Reward = { id: string; title: string | Words; description: string | Words; xp: number; children: Child[]; status: Status; author: Person; note: string; icon: string; limit: number; created: string };
 export type Adjustment = { id: string; at: string; actor: Person; from: number; to: number; reason: string; undoneBy?: string; undoOf?: string };
 export type Completion = { id: string; taskId: string; child: Child; title: string | Words; xp: number; day: string; at: string; actor: Person; reversed: boolean; reason?: string; correctedBy?: Person; originalXP?: number; icon?: string; category?: Task['category']; effectiveAt?: string; adjustments?: Adjustment[] };
@@ -35,9 +35,9 @@ export function initialState(now = new Date().toISOString()): State {
   const specs: [string, Words, Words, number, Task['category'], string][] = [
     ['bed',w('Hacer mi cama','Fer el meu llit','Make my bed'),w('Estirar las sábanas y colocar la almohada.','Estirar els llençols i posar el coixí.','Straighten the covers and place the pillow.'),5,'morning','bed'],
     ['dress',w('Prepararme a tiempo','Preparar-me a temps','Get ready on time'),w('Vestirme antes de la hora que hemos acordado.','Vestir-me abans de l’hora que hem acordat.','Get dressed by our agreed time.'),5,'morning','shirt'],
-    ['room',w('Mi habitación, en orden','La meva habitació, endreçada','A tidy room'),w('Ropa en su sitio, suelo despejado y escritorio listo.','Roba al seu lloc, terra lliure i escriptori a punt.','Clothes put away, clear floor and tidy desk.'),10,'afternoon','sparkles'],
+    ['room',w('Mi habitación, en orden','La meva habitació, endreçada','A tidy room'),w('Ropa en su sitio, suelo despejado y escritorio listo.','Roba al seu lloc, terra lliure i escriptori a punt.','Clothes put away, clear floor and tidy desk.'),10,'all-day','sparkles'],
     ['table',w('Ayudar con la mesa','Ajudar amb la taula','Help set the table'),w('Preparar la mesa para compartir la comida.','Preparar la taula per compartir l’àpat.','Get the table ready for our meal.'),5,'afternoon','utensils'],
-    ['laundry',w('Recoger mi ropa','Recollir la meva roba','Put my clothes away'),w('Doblar y guardar la ropa que está lista.','Plegar i desar la roba que està a punt.','Fold and put away the clean clothes.'),5,'afternoon','shirt'],
+    ['laundry',w('Recoger mi ropa','Recollir la meva roba','Put my clothes away'),w('Doblar y guardar la ropa que está lista.','Plegar i desar la roba que està a punt.','Fold and put away the clean clothes.'),5,'all-day','shirt'],
     ['plan',w('Organizar mi día','Organitzar el meu dia','Plan my day'),w('Revisar mi lista y elegir por dónde empezar.','Revisar la meva llista i triar per on començar.','Check my list and choose where to start.'),5,'morning','list'],
     ['shower',w('Mi rutina de ducha','La meva rutina de dutxa','My shower routine'),w('Seguir los pasos de higiene que hemos aprendido. Pedir ayuda está bien.','Seguir els passos d’higiene que hem après. Demanar ajuda està bé.','Follow the hygiene steps we have learned. It is okay to ask for help.'),10,'evening','shower'],
     ['bag',w('Mochila preparada','Motxilla preparada','Pack my bag'),w('Revisar lo que necesito para mañana.','Revisar què necessito per demà.','Check what I need for tomorrow.'),5,'evening','backpack'],
@@ -94,7 +94,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     const item = { id:old?.id ?? a.requestId,title:text(a.title,100),description:optional(a.description,600),xp:integer(a.xp,task?1:0,task?100:10000),children:parent?children(a.children):[actor as Child],status:parent?'approved' as Status:'pending' as Status,author:old?.author??actor,note:parent?optional(a.note,300):'',icon:typeof a.icon==='string'&&['gift','film','headphones','game','book','sparkles','bed','shirt','utensils','list','shower','backpack'].includes(a.icon)?a.icon:(task?'sparkles':'gift'),limit:integer(a.limit??1,1,task?5:99),created:old?.created??at };
     if(!task && parent) requireThat(item.xp>0);
     if(task) {
-      requireThat(['morning','afternoon','evening'].includes(String(a.category)));
+      requireThat(['all-day','morning','afternoon','evening'].includes(String(a.category)));
       requireThat(Array.isArray(a.days)&&a.days.length<=7&&a.days.every(x=>Number.isInteger(x)&&x>=0&&x<=6));
       const once=a.once===true; requireThat(once||(a.days as number[]).length>0);
       const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit};

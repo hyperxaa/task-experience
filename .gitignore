@@ -15,7 +15,6 @@
 
 # next.js
 /.next/
-/.vinext/
 /out/
 
 # misc
@@ -39,7 +38,10 @@ yarn-error.log*
 next-env.d.ts
 *.tsbuildinfo
 /dist/
-/.wrangler/
+/data/
+*.db
+*.db-shm
+*.db-wal
 # Checkout-local execution profile and tool state; never publish them.
 /.sites-runtime/
 /.agents/
