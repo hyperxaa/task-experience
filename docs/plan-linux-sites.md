@@ -1,6 +1,6 @@
 # Plan: una app para Linux y Sites
 
-Estado: implementación en curso en la rama `linux`. En esta versión pasan typecheck, lint, 53 pruebas y los builds de Node y Sites. El Site nuevo y privado ya está registrado; falta publicar la versión, verificar su URL y subir el commit final a GitHub. Revisión: 26 de septiembre de 2026.
+Estado: implementación completada en la rama `linux`. Pasan typecheck, lint, 53 pruebas y los builds de Node y Sites. El Site se publicó de forma privada y la rama `linux` está actualizada en GitHub. Revisión: 26 de septiembre de 2026.
 
 ## Resultado esperado
 
