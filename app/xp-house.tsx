@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Lang } from '@/lib/domain';
 import { ASLEEP_START, CYCLE_SECONDS, DAY_END, WAKE_START, buildCatPlan, buildDayPlan, sampleCat, samplePerson, type HousePerson, type MotionPlan } from './house-motion';
 
-export function XPHouse({lang='es',onDiscover}:{lang?:Lang;onDiscover?:()=>void}){
+export function XPHouse({lang='es',onDiscover,custom=false}:{lang?:Lang;onDiscover?:()=>void;custom?:boolean}){
   const [reduced,setReduced]=useState(true),[scene,setScene]=useState({time:WAKE_START,round:0}),[seed,setSeed]=useState(1);
   useEffect(()=>{
     const media=window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -32,7 +32,7 @@ export function XPHouse({lang='es',onDiscover}:{lang?:Lang;onDiscover?:()=>void}
   const watching=running&&time<DAY_END&&(['A','I','X','M'] as const).some(person=>samplePerson(person,plans[person],time).activity==='sofa');
   const t=(es:string,ca:string,en:string)=>lang==='ca'?ca:lang==='en'?en:es;
   return <section className={`home-arcade ${running?'running':'paused'} ${night?'nighttime':''}`} aria-label={t('Vuestra casa animada','La vostra casa animada','Your animated home')} onClick={onDiscover}>
-    <svg viewBox="0 0 420 670" role="img" aria-label={t('Plano de casa: terraza y salón arriba, cocina y baños en el centro, Aina e Iara abajo','Plànol de casa amb les habitacions d’Aina i Iara a baix','Floorplan with Aina and Iara bedrooms at the bottom')}>
+    <svg viewBox="0 0 420 670" role="img" aria-label={custom?t('Plano de una casa familiar animada','Plànol d’una casa familiar animada','Animated family house floorplan'):t('Plano de casa: terraza y salón arriba, cocina y baños en el centro, Aina e Iara abajo','Plànol de casa amb les habitacions d’Aina i Iara a baix','Floorplan with Aina and Iara bedrooms at the bottom')}>
       <defs><pattern id="floorboards" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M0 24H24M12 0V24" stroke="#bfd4d5" opacity=".045"/></pattern><pattern id="tiles" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke="#bfd4d5" opacity=".09"/></pattern><filter id="playerGlow"><feGaussianBlur stdDeviation="3"/></filter></defs>
       <path d="M145 28H384V640H25V405H78V350H145Z" fill="#1c2c38" stroke="#65828c" strokeWidth="5" strokeLinejoin="round"/>
       <path d="M145 28H384V112H145Z" fill="#263b3c"/>
@@ -60,7 +60,7 @@ export function XPHouse({lang='es',onDiscover}:{lang?:Lang;onDiscover?:()=>void}
         <Bed x={205} y={550} color="#a181b5"/><Desk x={166} y={611} color="#8d739f"/>
         <rect x="304" y="550" width="65" height="74" rx="5" fill="#777d98"/><rect x="309" y="553" width="23" height="15" rx="3" fill="#b8bacc"/><rect x="339" y="553" width="23" height="15" rx="3" fill="#b8bacc"/><path d="M304 578H369"/>
       </g>
-      <g className="plan-labels"><text x="235" y="46">{t('TERRAZA','TERRASSA','TERRACE')}</text><text x="248" y="137">{t('SALÓN','SALA','LOUNGE')}</text><text x="312" y="300">{t('COCINA','CUINA','KITCHEN')}</text><text x="70" y="459">{t('BAÑO','BANY','BATH')}</text><text x="330" y="496">{t('BAÑO','BANY','BATH')}</text><text x="175" y="459">{t('PASILLO','PASSADÍS','HALL')}</text><text x="77" y="543" fill="#91dfce">AINA</text><text x="187" y="543" fill="#d6b3ed">IARA</text><text x="326" y="529">{t('DORMITORIO','DORMITORI','BEDROOM')}</text></g>
+      <g className="plan-labels"><text x="235" y="46">{t('TERRAZA','TERRASSA','TERRACE')}</text><text x="248" y="137">{t('SALÓN','SALA','LOUNGE')}</text><text x="312" y="300">{t('COCINA','CUINA','KITCHEN')}</text><text x="70" y="459">{t('BAÑO','BANY','BATH')}</text><text x="330" y="496">{t('BAÑO','BANY','BATH')}</text><text x="175" y="459">{t('PASILLO','PASSADÍS','HALL')}</text><text x="77" y="543" fill="#91dfce">{custom?t('NIÑOS','INFANTS','KIDS'):'AINA'}</text><text x="187" y="543" fill="#d6b3ed">{custom?'':'IARA'}</text><text x="326" y="529">{t('DORMITORIO','DORMITORI','BEDROOM')}</text></g>
       <Resident name="A" hair="curly" color="#56bfb0" time={time} plan={plans.A} running={running} sleeping={night} task={t('Mesa lista','Taula a punt','Table set')} xp={5}/>
       <Resident name="I" hair="straight" color="#af87ca" time={time} plan={plans.I} running={running} sleeping={night} task={t('Misión hecha','Missió feta','Mission done')} xp={5}/>
       <Resident name="X" hair="brown" color="#8aa1bd" time={time} plan={plans.X} running={running} sleeping={night} task={t('En equipo','En equip','Teamwork')} />

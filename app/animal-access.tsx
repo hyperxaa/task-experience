@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { ArrowRight, Delete, Shuffle, LockKeyhole } from 'lucide-react';
-import { names, type Person } from '@/lib/domain';
+import type { Person } from '@/lib/domain';
+import type { Member } from '@/lib/family';
 
 export const animals = [
   {id:'bengal',emoji:'🐈',es:'Gato bengalí'}, {id:'panda',emoji:'🐼',es:'Panda'},
@@ -34,7 +35,7 @@ export function AnimalCodePicker({value,onChange,lang}:{value:AnimalId[];onChang
   return <div className="animal-picker"><div className="animal-sequence compact">{Array.from({length:4},(_,i)=>{const a=value[i]&&animalById[value[i]];return <span className={a?.id==='bengal'?'bengal chosen':'chosen'} key={i}>{a?a.emoji:<b>{i+1}</b>}</span>;})}</div><div className="animal-picker-grid">{animals.map(a=><button type="button" key={a.id} className={a.id==='bengal'?'bengal':''} disabled={value.length>=4} onClick={()=>onChange([...value,a.id])} aria-label={a.es}>{a.emoji}</button>)}</div><button className="text-button" type="button" disabled={!value.length} onClick={()=>onChange(value.slice(0,-1))}><Delete size={16}/>{t('Borrar último','Esborrar últim','Delete last')}</button></div>;
 }
 
-export function CodeReveal({codes,lang,onDone}:{codes:Record<Person,AnimalId[]>;lang:string;onDone:()=>void}){
+export function CodeReveal({codes,members,lang,onDone}:{codes:Record<Person,AnimalId[]>;members:Member[];lang:string;onDone:()=>void}){
   const t=(es:string,ca:string,en:string)=>lang==='ca'?ca:lang==='en'?en:es;
-  return <div className="code-reveal"><div className="reveal-warning"><LockKeyhole size={19}/><p><strong>{t('Guardad estas combinaciones ahora.','Deseu aquestes combinacions ara.','Save these combinations now.')}</strong><span>{t('Solo aparecen esta vez. Podréis cambiarlas desde Gestión.','Només apareixen aquesta vegada. Les podreu canviar des de Gestió.','They appear only once. You can change them in Manage.')}</span></p></div>{(Object.keys(names) as Person[]).map(p=><article key={p}><span className={`avatar small ${p}`}>{names[p][0]}</span><strong>{names[p]}</strong><div>{codes[p].map((id,i)=><span title={animalById[id].es} className={id==='bengal'?'bengal':''} key={`${id}-${i}`}>{animalById[id].emoji}</span>)}</div></article>)}<button className="pin-enter" onClick={onDone}>{t('Las tengo. Que empiece la partida.','Les tinc. Que comenci la partida.','Got them. Start the game.')}<ArrowRight size={18}/></button></div>;
+  return <div className="code-reveal"><div className="reveal-warning"><LockKeyhole size={19}/><p><strong>{t('Guardad estas combinaciones ahora.','Deseu aquestes combinacions ara.','Save these combinations now.')}</strong><span>{t('Solo aparecen esta vez. Podréis cambiarlas desde Gestión.','Només apareixen aquesta vegada. Les podreu canviar des de Gestió.','They appear only once. You can change them in Manage.')}</span></p></div>{members.filter(p=>codes[p.id]).map(p=><article key={p.id}><span className={`avatar small ${p.id}`}>{p.name[0]}</span><strong>{p.name}</strong><div>{codes[p.id].map((id,i)=><span title={animalById[id].es} className={id==='bengal'?'bengal':''} key={`${id}-${i}`}>{animalById[id].emoji}</span>)}</div></article>)}<button className="pin-enter" onClick={onDone}>{t('Las tengo. Que empiece la partida.','Les tinc. Que comenci la partida.','Got them. Start the game.')}<ArrowRight size={18}/></button></div>;
 }

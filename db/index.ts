@@ -4,16 +4,10 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
+import type { BoundStatement, DatabaseAdapter } from './types';
 
-export type BoundStatement = {
-  bind: (...values: unknown[]) => BoundStatement;
-  first: <T = Record<string, unknown>>() => T | null;
-  run: () => { meta: { changes: number } };
-};
-type D1Compat = {
-  prepare: (sql: string) => BoundStatement;
-  batch: (statements: BoundStatement[]) => Promise<Array<{ meta: { changes: number } }>>;
-};
+export type { BoundStatement } from './types';
+type D1Compat = DatabaseAdapter;
 
 let sqlite: Database.Database | undefined;
 let compat: D1Compat | undefined;
@@ -89,7 +83,7 @@ export function getDatabase(): D1Compat {
       return bound;
     },
     async batch(statements) {
-      return open().transaction(() => statements.map((statement) => statement.run()))();
+      return open().transaction(() => statements.map((statement) => statement.run()))() as Array<{ meta: { changes: number } }>;
     },
   };
   return compat;

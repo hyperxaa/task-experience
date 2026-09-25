@@ -30,6 +30,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+.dev.vars
+.wrangler/
+.test-output.txt
+.sites-build-output.txt
+.node-build-output.txt
+.lint-output.txt
+.smoke-sites.mjs
 
 # vercel
 .vercel

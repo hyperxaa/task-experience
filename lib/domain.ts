@@ -1,9 +1,10 @@
 import { settleCycles, cycleSummary, madridInstant, nextClose, type Cycle, type CycleRule } from './cycles.ts';
 import { settleWeeklyBonuses, bonusWeek, includeApprovedTask, plannedTaskForDay, scheduledTasksForDay, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
 import { CLIENT_DISCOVERIES, DISCOVERY_IDS, discoveryWords, objectiveDiscoveryCandidates, type DiscoveryId } from './discoveries.ts';
+import { demoMembers, familyMembers, childrenOf, memberName, memberRole, type Member } from './family.ts';
 export type Lang = 'es' | 'ca' | 'en';
-export type Child = 'aina' | 'iara';
-export type Person = Child | 'xavi' | 'mireia';
+export type Child = string;
+export type Person = string;
 export type Status = 'pending' | 'changes' | 'approved' | 'archived';
 export type Words = { es: string; ca: string; en: string };
 export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; cadence?: 'daily' | 'weekly'; status: Status; author: Person; note: string; icon: string; created: string };
@@ -13,11 +14,11 @@ export type Completion = { id: string; taskId: string; child: Child; title: stri
 export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
-export type State = { version: 1; rulesVersion?: 2; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
+export type State = { version: 1; rulesVersion?: 2; members?: Member[]; setupMode?: 'demo' | 'custom'; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
 export type Action = { type: string; requestId: string; [key: string]: unknown };
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
-export const isParent = (p: Person | null | undefined) => p === 'xavi' || p === 'mireia';
+export const isParent = (p: Person | null | undefined, s?: State | null) => !!p && memberRole(s, p) === 'adult';
 const olderKidsCopy:Record<string,string>={
   'Escuchar el audio o hacer las tareas de la app.':'Escuchar el audio o hacer las actividades de la app.',
   'Escoltar l’àudio o fer les tasques de l’app.':'Escoltar l’àudio o fer les activitats de l’app.',
@@ -31,6 +32,7 @@ export const dateInMadrid = (date = new Date()) => new Intl.DateTimeFormat('en-C
 export function shiftDay(day: string, n: number) { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 export function weekBeginning(day: string, start = 1) { const n = new Date(day + 'T12:00:00Z').getUTCDay(); return shiftDay(day, -((n - start + 7) % 7)); }
 export function migrateState(s: State): State {
+  s.members ??= structuredClone(demoMembers);
   if (s.rulesVersion === 2) return s;
   const reward = s.rewards.find(r => r.id === 'friend-sleepover');
   if (reward) {
@@ -39,7 +41,7 @@ export function migrateState(s: State): State {
     reward.description = w('Cuesta 1500 Xp. Puedes ahorrar o conseguir una semana perfecta. Los padres confirman la fecha.', 'Costa 1500 Xp. Pots estalviar o aconseguir una setmana perfecta. Els pares confirmen la data.', 'Costs 1500 Xp. Save up or earn a perfect week. Parents confirm the date.');
   }
   const oldIds = (s.weeklyBonuses ?? []).map(b => b.id);
-  s.seenCelebrations = { aina: [...oldIds], iara: [...oldIds], xavi: [...oldIds], mireia: [...oldIds] };
+  s.seenCelebrations = Object.fromEntries(familyMembers(s).map(member => [member.id, [...oldIds]]));
   s.cycleRule = { day: 1, time: '00:00' };
   s.weekStart = 1;
   s.cycles = [];
@@ -62,8 +64,11 @@ export function availableSuperBonus(s: State, child: Child, rewardId: string) {
 export function due(t: Task, child: Child, day: string, s: State) { const plan=s.weeklyPlans?.find(item=>item.week===bonusWeek(day));const planned=plan&&day>=(plan.startsOn??plan.week)?plannedTaskForDay(s,t.id,day):null;const scheduled=planned??(t.once||!plan||day<(plan.startsOn??plan.week)?t:null);return !!scheduled && scheduled.status === 'approved' && scheduled.children.includes(child) && (scheduled.once || scheduled.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (scheduled.once ? !s.completions.some(c => c.taskId === scheduled.id && c.child === child && !c.reversed) : scheduled.cadence === 'weekly' ? completed(s,scheduled,child,day) < scheduled.limit : true); }
 export function completed(s: State, t: Task, child: Child, day: string) { const scheduled=plannedTaskForDay(s,t.id,day)??t;const week=scheduled.cadence==='weekly'?weekBeginning(day,1):null; return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (scheduled.once || (week ? c.day>=week&&c.day<=shiftDay(week,6) : c.day === day))).length; }
 const w = (es: string, ca: string, en: string): Words => ({ es, ca, en });
-export function initialState(now = new Date().toISOString()): State {
-  const base = { children: ['aina', 'iara'] as Child[], days: [0,1,2,3,4,5,6], once: false, limit: 1, status: 'approved' as Status, author: 'xavi' as Person, note: '', created: now };
+export function initialState(now = new Date().toISOString(), members: Member[] = demoMembers, mode: 'demo' | 'custom' = 'demo'): State {
+  const selected = structuredClone(members);
+  const children = selected.filter(member => member.role === 'child').map(member => member.id);
+  const author = selected.find(member => member.role === 'adult')!.id;
+  const base = { children, days: [0,1,2,3,4,5,6], once: false, limit: 1, status: 'approved' as Status, author, note: '', created: now };
   const daily = (id:string,title:Words,description:Words,xp:number,category:Task['category'],icon:string,options:Partial<Task> = {}): Task => ({...base,id,title,description,xp,category,icon,...options});
   const specs: Task[] = [
     daily('bed',w('Hacer mi cama','Fer el meu llit','Make my bed'),w('Estirar las sábanas y colocar la almohada.','Estirar els llençols i posar el coixí.','Straighten the covers and place the pillow.'),1,'morning','bed'),
@@ -86,15 +91,22 @@ export function initialState(now = new Date().toISOString()): State {
     id: 'friend-sleepover',
     title: w('Traer una amiga a dormir el fin de semana', 'Convidar una amiga a dormir el cap de setmana', 'Invite a friend for a weekend sleepover'),
     description: w('Cuesta 1500 Xp. Puedes ahorrar o conseguir una semana perfecta. Los padres confirman la fecha.', 'Costa 1500 Xp. Pots estalviar o aconseguir una setmana perfecta. Els pares confirmen la data.', 'Costs 1500 Xp. Save up or earn a perfect week. Parents confirm the date.'),
-    xp: 1500, children: ['aina', 'iara'], status: 'approved', author: 'xavi', note: '', icon: 'bed', limit: 99, created: now,
+    xp: 1500, children, status: 'approved', author, note: '', icon: 'bed', limit: 99, created: now,
   };
-  return { version: 1, rulesVersion: 2, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], seenCelebrations: {}, preferences: { aina: {lang:'es',goal:null}, iara:{lang:'es',goal:null}, xavi:{lang:'es',goal:null}, mireia:{lang:'es',goal:null} }, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
+  if (mode === 'custom') {
+    sleepover.title = w('Invitar a alguien a dormir el fin de semana', 'Convidar algú a dormir el cap de setmana', 'Invite someone for a weekend sleepover');
+    sleepover.description = w('Cuesta 1500 Xp. Puedes ahorrar o conseguir una semana perfecta. La familia confirma la fecha.', 'Costa 1500 Xp. Pots estalviar o aconseguir una setmana perfecta. La família confirma la data.', 'Costs 1500 Xp. Save up or earn a perfect week. Your family confirms the date.');
+    const demoOnly = new Set(['table', 'clear-table', 'bag-extra-iara', 'bag-extra-aina', 'school-homework', 'new-food']);
+    for (let index = specs.length - 1; index >= 0; index--) if (demoOnly.has(specs[index].id)) specs.splice(index, 1);
+  }
+  const preferences = Object.fromEntries(selected.map(member => [member.id, { lang: 'es' as Lang, goal: null }]));
+  return { version: 1, rulesVersion: 2, members: selected, setupMode: mode, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], seenCelebrations: {}, preferences, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
 }
 function requireThat(value: unknown, code = 'invalid') { if (!value) throw new DomainError(code); }
 function text(v: unknown, max = 160) { requireThat(typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max); return (v as string).trim(); }
 function optional(v: unknown, max = 1000) { if (v === undefined || v === '') return ''; return text(v,max); }
 function integer(v: unknown, min: number, max: number) { requireThat(Number.isInteger(v) && Number(v) >= min && Number(v) <= max); return Number(v); }
-function children(v: unknown): Child[] { requireThat(Array.isArray(v) && v.length > 0 && v.length <= 2 && v.every(x => x==='aina'||x==='iara')); return [...new Set(v as Child[])]; }
+function selectedChildren(v: unknown, s: State): Child[] { requireThat(Array.isArray(v) && v.length > 0 && v.length <= childrenOf(s).length && v.every(x => typeof x === 'string' && childrenOf(s).includes(x))); return [...new Set(v as Child[])]; }
 function dayValue(v: unknown) { const d = text(v,10); requireThat(/^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d+'T12:00:00Z')) && new Date(d+'T12:00:00Z').toISOString().slice(0,10) === d); return d; }
 function periodBounds(scope: unknown, value: unknown, today: string): [string,string] {
   const day = dayValue(value); requireThat(day <= today);
@@ -104,12 +116,12 @@ function periodBounds(scope: unknown, value: unknown, today: string): [string,st
   throw new DomainError('invalid');
 }
 export function applyAction(original: State, actor: Person, a: Action, now = new Date()): State {
-  requireThat(Object.hasOwn(names,actor),'forbidden');
+  requireThat(memberRole(original, actor) !== null,'forbidden');
   requireThat(typeof a.requestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(a.requestId));
   if(original.processed.includes(a.requestId)) return original;
-  const s: State = settleCycles(settleWeeklyBonuses(migrateState(structuredClone(original)),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor);
+  const s: State = settleCycles(settleWeeklyBonuses(migrateState(structuredClone(original)),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor,s);
   const requireParent = () => requireThat(parent,'forbidden');
-  const childFor = (): Child => { const c = a.child; requireThat(c==='aina'||c==='iara'); requireThat(parent||c===actor,'forbidden'); return c as Child; };
+  const childFor = (): Child => { const c = a.child; requireThat(typeof c === 'string' && childrenOf(s).includes(c)); requireThat(parent||c===actor,'forbidden'); return c as Child; };
   let log = a.type;
   if(a.type === 'complete') {
     const child = childFor(); const day = dayValue(a.day ?? today);
@@ -127,7 +139,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   } else if(a.type === 'reverse' || a.type === 'uncomplete' || a.type === 'undoAdjustment') {
     const c = s.completions.find(x=>x.id===a.id); requireThat(c,'missing');
     if(a.type==='reverse') requireParent();
-    else if(!parent) requireThat(c!.child===actor&&c!.actor===actor&&c!.day===today&&!c!.adjustments?.some(x=>isParent(x.actor)),'forbidden');
+    else if(!parent) requireThat(c!.child===actor&&c!.actor===actor&&c!.day===today&&!c!.adjustments?.some(x=>isParent(x.actor,s)),'forbidden');
     c!.originalXP ??= c!.xp; c!.adjustments ??= [];
     let target=0, reason='Desmarcada desde Día a día', undoOf:string|undefined;
     if(a.type==='undoAdjustment') {
@@ -145,7 +157,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     const old = a.id ? list.find(x=>x.id===a.id) : undefined;
     if(a.id) requireThat(old,'missing');
     if(old && !parent) requireThat(old.author===actor && (old.status==='pending'||old.status==='changes'),'forbidden');
-    const item = { id:old?.id ?? a.requestId,title:text(a.title,100),description:optional(a.description,600),xp:integer(a.xp,task?1:0,task?100:10000),children:parent?children(a.children):[actor as Child],status:parent?'approved' as Status:'pending' as Status,author:old?.author??actor,note:parent?optional(a.note,300):'',icon:typeof a.icon==='string'&&['gift','film','headphones','game','book','sparkles','bed','shirt','utensils','list','shower','backpack'].includes(a.icon)?a.icon:(task?'sparkles':'gift'),limit:integer(a.limit??1,1,task?5:99),created:old?.created??at };
+    const item = { id:old?.id ?? a.requestId,title:text(a.title,100),description:optional(a.description,600),xp:integer(a.xp,task?1:0,task?100:10000),children:parent?selectedChildren(a.children,s):[actor as Child],status:parent?'approved' as Status:'pending' as Status,author:old?.author??actor,note:parent?optional(a.note,300):'',icon:typeof a.icon==='string'&&['gift','film','headphones','game','book','sparkles','bed','shirt','utensils','list','shower','backpack'].includes(a.icon)?a.icon:(task?'sparkles':'gift'),limit:integer(a.limit??1,1,task?5:99),created:old?.created??at };
     if(!task && parent) requireThat(item.xp>0 || a.requiresSuperBonus===true,'price');
     if(task) {
       requireThat(['all-day','morning','afternoon','evening'].includes(String(a.category)));
@@ -206,7 +218,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     const reason=a.type==='bulkResetXp'?'Restablecimiento de Xp del periodo':'Deshacer actividad del periodo';
     let affected=0;
     for(const c of s.completions){
-      const selected=c.child===child&&c.xp>0&&(a.type==='bulkResetXp'?c.day>=from&&c.day<=to:c.actor===child&&!c.adjustments?.some(adjustment=>isParent(adjustment.actor))&&dateInMadrid(new Date(c.at))>=from&&dateInMadrid(new Date(c.at))<=to);
+      const selected=c.child===child&&c.xp>0&&(a.type==='bulkResetXp'?c.day>=from&&c.day<=to:c.actor===child&&!c.adjustments?.some(adjustment=>isParent(adjustment.actor,s))&&dateInMadrid(new Date(c.at))>=from&&dateInMadrid(new Date(c.at))<=to);
       if(!selected)continue;
       c.originalXP ??= c.xp;c.adjustments ??=[];
       c.adjustments.push({id:`${a.requestId}-${c.id}`,at,actor,from:c.xp,to:0,reason});
@@ -234,7 +246,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
       affected++;
     }
     requireThat(affected>0,'nothingToUndo');
-    log=`${reason}: ${names[child]} · ${from} — ${to}`;
+    log=`${reason}: ${memberName(s,child)} · ${from} — ${to}`;
   } else if(a.type === 'weekStart') {
     requireParent(); throw new DomainError('invalid');
   } else if(a.type === 'undo') {
@@ -253,13 +265,13 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   }
   settleWeeklyBonuses(s,now);
   s.badges ??= [];
-  for(const child of ['aina','iara'] as Child[])for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed&&!c.taskId.startsWith('egg-')).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
+  for(const child of childrenOf(s))for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed&&!c.taskId.startsWith('egg-')).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
   s.processed.push(a.requestId);
   if(a.type!=='preference'&&a.type!=='celebrationSeen') s.audit.push({at,actor,action:a.type,title:log});
   return s;
 }
 export function visibleState(s: State, p: Person): State {
-  if(isParent(p)) return {...s,processed:[]};
+  if(isParent(p,s)) return {...s,processed:[]};
   const child=p as Child;
   return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),seenCelebrations:{[p]:s.seenCelebrations?.[p]??[]},changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
 }

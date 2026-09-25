@@ -29,23 +29,29 @@ globalThis.__taskXpTestDB = adapter;
 
 const compile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const cycles = moduleUrl(compile(readFileSync('lib/cycles.ts', 'utf8')));
-const weeklyBonuses = moduleUrl(compile(readFileSync('lib/weekly-bonuses.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`));
+const family = moduleUrl(compile(readFileSync('lib/family.ts', 'utf8')));
+const cycles = moduleUrl(compile(readFileSync('lib/cycles.ts', 'utf8')).replace("from './family.ts'", `from '${family}'`));
+const weeklyBonuses = moduleUrl(compile(readFileSync('lib/weekly-bonuses.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './family.ts'", `from '${family}'`));
 const discoveries = moduleUrl(compile(readFileSync('lib/discoveries.ts', 'utf8')));
-const domain = moduleUrl(compile(readFileSync('lib/domain.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './weekly-bonuses.ts'", `from '${weeklyBonuses}'`).replace("from './discoveries.ts'", `from '${discoveries}'`));
+const domain = moduleUrl(compile(readFileSync('lib/domain.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './weekly-bonuses.ts'", `from '${weeklyBonuses}'`).replace("from './discoveries.ts'", `from '${discoveries}'`).replace("from './family.ts'", `from '${family}'`));
 const require = createRequire(import.meta.url);
-const argon2Url = pathToFileURL(require.resolve('argon2')).href;
+const nobleUrl = import.meta.resolve('@noble/hashes/argon2.js');
+const authArgon = moduleUrl(compile(readFileSync('lib/auth-argon.ts', 'utf8')).replace("from '@noble/hashes/argon2.js'", `from '${nobleUrl}'`));
 const zodUrl = pathToFileURL(require.resolve('zod')).href;
 const stateImport = moduleUrl(compile(readFileSync('lib/state-import.ts', 'utf8'))
   .replace("from 'zod'", `from '${zodUrl}'`)
   .replace("from './domain.ts'", `from '${domain}'`)
-  .replace("from './discoveries.ts'", `from '${discoveries}'`));
+  .replace("from './discoveries.ts'", `from '${discoveries}'`)
+  .replace("from './family.ts'", `from '${family}'`));
 let serverSource = compile(readFileSync('lib/server.ts', 'utf8'))
-  .replace("import { getDatabase } from '../db';", 'const getDatabase=()=>globalThis.__taskXpTestDB;')
-  .replace("from 'argon2'", `from '${argon2Url}'`)
+  .replace("import { getDatabase } from '../db/platform';", 'const getDatabase=()=>globalThis.__taskXpTestDB;')
+  .replace("from './auth-argon'", `from '${authArgon}'`)
   .replace("from './domain'", `from '${domain}'`)
   .replace("from './cycles'", `from '${cycles}'`)
-  .replace("from './weekly-bonuses'", `from '${weeklyBonuses}'`);
+  .replace("from './weekly-bonuses'", `from '${weeklyBonuses}'`)
+  .replace("from './family'", `from '${family}'`);
+const runtimeConfig = moduleUrl(compile(readFileSync('lib/runtime-config.ts', 'utf8')));
+serverSource = serverSource.replace("from './runtime-config'", `from '${runtimeConfig}'`);
 serverSource = serverSource.replace("from './state-import'", `from '${stateImport}'`);
 const { handle } = await import(moduleUrl(serverSource));
 

@@ -1,4 +1,5 @@
 import type { Child, Completion, State } from './domain';
+import { childrenOf } from './family.ts';
 
 export type CycleRule = { day: number; time: string };
 export type Cycle = CycleRule & { id: string; start: string; end: string; closed?: boolean; snapshot?: Record<Child, { xp: number; tasks: number }>; reconstructed?: boolean };
@@ -48,7 +49,7 @@ export function settleCycles(s: State, now = new Date()) {
     }
   }
   s.badges ??= [];
-  for(const child of ['aina','iara'] as Child[]){const rows=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));for(const threshold of [1,10,25,50,100])if(rows.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:rows[threshold-1].at});}
+  for(const child of childrenOf(s)){const rows=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));for(const threshold of [1,10,25,50,100])if(rows.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:rows[threshold-1].at});}
   s.cycleRule ??= { day: 1, time: '00:00' };
   s.cycles ??= [];
   if (!s.cycles.length) {
@@ -58,10 +59,10 @@ export function settleCycles(s: State, now = new Date()) {
   }
   let open = s.cycles[s.cycles.length - 1];
   const earliest = s.completions.map(effectiveAt).sort()[0];
-  while(earliest&&earliest<s.cycles[0].start){const first=s.cycles[0],end=first.start;const previous:Cycle={day:first.day,time:first.time,id:end,start:previousClose(end,first),end,closed:true,reconstructed:true};previous.snapshot={aina:cycleSummary(s,previous,'aina',end),iara:cycleSummary(s,previous,'iara',end)};s.cycles.unshift(previous);}
+  while(earliest&&earliest<s.cycles[0].start){const first=s.cycles[0],end=first.start;const previous:Cycle={day:first.day,time:first.time,id:end,start:previousClose(end,first),end,closed:true,reconstructed:true};previous.snapshot=Object.fromEntries(childrenOf(s).map(child=>[child,cycleSummary(s,previous,child,end)]));s.cycles.unshift(previous);}
   while (open.end <= now.toISOString()) {
     open.closed = true;
-    open.snapshot = { aina: cycleSummary(s, open, 'aina', open.end), iara: cycleSummary(s, open, 'iara', open.end) };
+    open.snapshot = Object.fromEntries(childrenOf(s).map(child=>[child,cycleSummary(s,open,child,open.end)]));
     const end = nextClose(new Date(open.end), s.cycleRule);
     open = { ...s.cycleRule, id: end, start: open.end, end };
     s.cycles.push(open);

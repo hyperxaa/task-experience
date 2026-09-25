@@ -1,11 +1,13 @@
-import argon2 from 'argon2';
 import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, pbkdf2 as pbkdf2Callback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { getDatabase, type BoundStatement } from '../db';
-import { applyAction, initialState, migrateState, visibleState, isParent, names, DomainError, type Person, type State, type Action } from './domain';
+import { getDatabase, type BoundStatement } from '../db/platform';
+import { applyAction, initialState, migrateState, visibleState, isParent, DomainError, type Person, type State, type Action } from './domain';
+import { demoMembers, familyMembers, memberRole, parseFamilyMembers, type Member } from './family';
 import { settleWeeklyBonuses } from './weekly-bonuses';
 import { settleCycles } from './cycles';
 import { parseExportedState } from './state-import';
+import { runtimeConfig } from './runtime-config';
+import { hashArgon2id, verifyArgon2id } from './auth-argon';
 
 type Stored = { id: number; revision: number; data: string; credentials: string };
 type Session = { token: string; profile: Person | null; expires: number; parent_until: number; remember_token: string | null };
@@ -21,8 +23,8 @@ const random = () => hex(randomBytes(32));
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const pbkdf2 = promisify(pbkdf2Callback);
 function pepper(value: string) {
-  const secret = process.env.SESSION_SECRET;
-  if (process.env.NODE_ENV === 'production' && (!secret || !/^[a-f0-9]{64,}$/i.test(secret))) throw new Error('SESSION_SECRET must be at least 32 random bytes encoded as hex');
+  const { sessionSecret: secret, production } = runtimeConfig();
+  if (production && (!secret || !/^[a-f0-9]{64,}$/i.test(secret))) throw new Error('SESSION_SECRET must be at least 32 random bytes encoded as hex');
   return createHmac('sha256', secret || 'local-development-only-task-xp-pepper').update(value).digest('hex');
 }
 function pendingCodeKey() {
@@ -43,12 +45,12 @@ function decryptPendingCodes(value: string): Record<Person, string[]> {
 }
 
 async function passwordHash(value: string): Promise<Hash> {
-  return { salt: '', hash: await argon2.hash(pepper(value), { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 }), algorithm: 'argon2id' };
+  return { salt: '', hash: await hashArgon2id(pepper(value)), algorithm: 'argon2id' };
 }
 async function matches(value: unknown, stored: Hash) {
   if (typeof value !== 'string' || value.length > 256) return false;
   if (stored.algorithm === 'argon2id' || stored.hash.startsWith('$argon2id$')) {
-    try { return await argon2.verify(stored.hash, pepper(value)); } catch { return false; }
+    try { return await verifyArgon2id(stored.hash, pepper(value)); } catch { return false; }
   }
   // Verify older PBKDF2 records and replace them with Argon2id on a successful login.
   try {
@@ -60,15 +62,15 @@ async function matches(value: unknown, stored: Hash) {
 function validAnimalCode(value: unknown): value is string {
   return typeof value === 'string' && value.split('.').length === 4 && value.split('.').every((animal) => animalIds.includes(animal));
 }
-async function codeHashes(codes: Record<Person, string[]>) {
+async function codeHashes(codes: Record<Person, string[]>, members: Member[]) {
   const result = {} as Record<Person, Hash>;
-  for (const profile of Object.keys(names) as Person[]) result[profile] = await passwordHash(codes[profile].join('.'));
+  for (const profile of members.map(member => member.id)) result[profile] = await passwordHash(codes[profile].join('.'));
   return result;
 }
-function makeAnimalCodes() {
+function makeAnimalCodes(members: Member[]) {
   const result = {} as Record<Person, string[]>;
   const used = new Set<string>();
-  for (const profile of Object.keys(names) as Person[]) {
+  for (const profile of members.map(member => member.id)) {
     let code: string[];
     let key: string;
     do {
@@ -85,7 +87,7 @@ function makeAnimalCodes() {
   return result;
 }
 function secureCookie(request: Request) {
-  const publicOrigin = process.env.PUBLIC_ORIGIN;
+  const publicOrigin = runtimeConfig().publicOrigin;
   return publicOrigin ? new URL(publicOrigin).protocol === 'https:' : new URL(request.url).protocol === 'https:';
 }
 function cookie(request: Request, name: string, value: string, maxAge?: number) {
@@ -119,7 +121,8 @@ async function newSession(request: Request, profile: Person | null, old?: Sessio
   }
 
   const expires = now + SESSION_MS;
-  const parentUntil = profile && isParent(profile) ? now + PARENT_MS : 0;
+  const family = profile ? await db().prepare('SELECT data FROM family WHERE id = 1').first<{ data: string }>() : null;
+  const parentUntil = profile && family && isParent(profile, JSON.parse(family.data) as State) ? now + PARENT_MS : 0;
   statements.push(db().prepare('INSERT INTO sessions (token, profile, expires, parent_until, remember_token) VALUES (?, ?, ?, ?, ?)').bind(digest(value), profile, expires, parentUntil, rememberToken));
   if (old) statements.push(db().prepare('DELETE FROM sessions WHERE token = ?').bind(old.token));
   statements.push(db().prepare('DELETE FROM sessions WHERE expires < ?').bind(now));
@@ -160,13 +163,14 @@ async function clearAttempts(key: string) {
 }
 function checkOrigin(request: Request) {
   const origin = request.headers.get('origin');
-  const expected = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : new URL(request.url).origin;
+  const publicOrigin = runtimeConfig().publicOrigin;
+  const expected = publicOrigin ? new URL(publicOrigin).origin : new URL(request.url).origin;
   if (!origin || origin !== expected) throw new DomainError('origin');
 }
 function setupAllowed(request: Request, body?: Record<string, unknown>) {
   const host = new URL(request.url).hostname;
-  const local = process.env.NODE_ENV !== 'production' && (host === 'localhost' || host === '127.0.0.1');
-  const secret = process.env.TASK_XP_SETUP_TOKEN;
+  const { production, setupToken: secret } = runtimeConfig();
+  const local = !production && (host === 'localhost' || host === '127.0.0.1');
   if (local) return true;
   if (!secret || secret.length < 32 || typeof body?.setupToken !== 'string') return false;
   const actual = Buffer.from(body.setupToken);
@@ -174,7 +178,8 @@ function setupAllowed(request: Request, body?: Record<string, unknown>) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 function responseState(row: Stored, session: Session | null) {
-  return { initialized: true, authenticated: !!session, profile: session?.profile ?? null, parentUntil: session?.parent_until ?? 0, state: session?.profile ? visibleState(JSON.parse(row.data), session.profile) : null };
+  const state = migrateState(JSON.parse(row.data) as State);
+  return { initialized: true, authenticated: !!session, profile: session?.profile ?? null, parentUntil: session?.parent_until ?? 0, members: familyMembers(state), state: session?.profile ? visibleState(state, session.profile) : null };
 }
 function response(data: unknown, status = 200, cookies: string[] = []) {
   const result = new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
@@ -202,7 +207,7 @@ export async function handle(request: Request) {
       session = restored.session;
       responseCookies.push(...restored.cookies);
     }
-    if (session?.profile && isParent(session.profile) && session.parent_until > 0 && session.parent_until <= Date.now()) {
+    if (session?.profile && row && isParent(session.profile, JSON.parse(row.data) as State) && session.parent_until > 0 && session.parent_until <= Date.now()) {
       responseCookies.push(...await newSession(request, null, session));
       session = null;
     }
@@ -226,14 +231,19 @@ export async function handle(request: Request) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DomainError('invalid');
     const op = body.op;
     if (op !== 'import' && raw.length > 16000) return reply({ error: 'invalid' }, 413);
-    const ip = process.env.TASK_XP_TRUST_PROXY === 'true' ? request.headers.get('x-real-ip') ?? 'unknown' : 'local';
+    const ip = runtimeConfig().clientIp(request);
     if (op === 'setup') {
       if (row) throw new DomainError('already');
       if (!setupAllowed(request, body)) throw new DomainError('setup');
       if (typeof body.password !== 'string' || body.password.length < 10 || body.password.length > 128) throw new DomainError('password');
-      const generated = makeAnimalCodes();
-      const credentials: Credentials = { password: await passwordHash(body.password), codes: await codeHashes(generated), pendingCodesEncrypted: encryptPendingCodes(generated) };
-      const state = initialState();
+      const mode = body.mode === 'custom' ? 'custom' : body.mode === undefined || body.mode === 'demo' ? 'demo' : null;
+      if (!mode) throw new DomainError('invalid');
+      let members: Member[];
+      try { members = mode === 'demo' ? structuredClone(demoMembers) : parseFamilyMembers(body.members); }
+      catch { throw new DomainError('invalid'); }
+      const generated = makeAnimalCodes(members);
+      const credentials: Credentials = { password: await passwordHash(body.password), codes: await codeHashes(generated, members), pendingCodesEncrypted: encryptPendingCodes(generated) };
+      const state = initialState(new Date().toISOString(), members, mode);
       await db().prepare('INSERT INTO family (id, revision, data, credentials) VALUES (1, 0, ?, ?)').bind(JSON.stringify(state), JSON.stringify(credentials)).run();
       return reply({ ok: true, animalCodes: generated }, 200, await newSession(request, null));
     }
@@ -267,7 +277,7 @@ export async function handle(request: Request) {
       if (!stored) throw new DomainError('credentials');
       const candidate = body.code ?? body.pin;
       const found: Person[] = [];
-      for (const profile of Object.keys(names) as Person[]) if (await matches(candidate, stored[profile])) found.push(profile);
+      for (const profile of familyMembers(JSON.parse(row.data) as State).map(member => member.id)) if (stored[profile] && await matches(candidate, stored[profile])) found.push(profile);
       if (!found.length) { await failedAttempt(attemptKey); throw new DomainError('credentials'); }
       await clearAttempts(attemptKey);
       if (found.length > 1) return reply({ needsProfile: true });
@@ -275,7 +285,7 @@ export async function handle(request: Request) {
     }
     if (op === 'profile') {
       const profile = body.profile as Person;
-      if (!Object.hasOwn(names, profile)) throw new DomainError('invalid');
+      if (!memberRole(JSON.parse(row.data) as State, profile)) throw new DomainError('invalid');
       const attemptKey = 'pin:' + profile + ':' + digest(ip);
       await checkLimit(attemptKey);
       const credentials: Credentials = JSON.parse(row.credentials), stored = credentials.codes ?? credentials.pins;
@@ -285,7 +295,7 @@ export async function handle(request: Request) {
     }
     if (!session.profile) return reply({ error: 'session' }, 401);
     if (op === 'security') {
-      if (!isParent(session.profile)) throw new DomainError('forbidden');
+      if (!isParent(session.profile, JSON.parse(row.data) as State)) throw new DomainError('forbidden');
       const credentials: Credentials = JSON.parse(row.credentials), stored = credentials.codes ?? credentials.pins;
       if (!stored) throw new DomainError('credentials');
       const attemptKey = 'security:' + digest(ip);
@@ -298,8 +308,8 @@ export async function handle(request: Request) {
       }
       if (body.profile) {
         const profile = body.profile as Person, code = body.code ?? body.pin;
-        if (!Object.hasOwn(names, profile) || !validAnimalCode(code)) throw new DomainError('pin');
-        for (const other of Object.keys(names) as Person[]) if (other !== profile && await matches(code, stored[other])) throw new DomainError('pin');
+        if (!memberRole(JSON.parse(row.data) as State, profile) || !validAnimalCode(code)) throw new DomainError('pin');
+        for (const other of familyMembers(JSON.parse(row.data) as State).map(member => member.id)) if (other !== profile && stored[other] && await matches(code, stored[other])) throw new DomainError('pin');
         credentials.codes ??= {} as Record<Person, Hash>;
         credentials.codes[profile] = await passwordHash(code);
       }
@@ -313,13 +323,15 @@ export async function handle(request: Request) {
       return reply({ ok: true });
     }
     if (op === 'export') {
-      if (!isParent(session.profile)) throw new DomainError('forbidden');
+      if (!isParent(session.profile, JSON.parse(row.data) as State)) throw new DomainError('forbidden');
       return reply({ exportedAt: new Date().toISOString(), data: JSON.parse(row.data) });
     }
     if (op === 'import' || op === 'resetAll') {
-      if (!isParent(session.profile)) throw new DomainError('forbidden');
+      if (!isParent(session.profile, JSON.parse(row.data) as State)) throw new DomainError('forbidden');
       if (op === 'resetAll' && body.confirm !== 'RESTABLECER') throw new DomainError('invalid');
-      const next = op === 'import' ? parseExportedState(body.backup) : initialState();
+      const previous = migrateState(JSON.parse(row.data) as State);
+      const next = op === 'import' ? parseExportedState(body.backup) : initialState(new Date().toISOString(), familyMembers(previous), previous.setupMode ?? 'demo');
+      if (op === 'import' && JSON.stringify(familyMembers(next)) !== JSON.stringify(familyMembers(previous))) throw new DomainError('invalid');
       const data = JSON.stringify(settleCycles(settleWeeklyBonuses(next)));
       const result = await db().prepare('UPDATE family SET data = ?, revision = revision + 1 WHERE id = 1 AND revision = ?').bind(data, row.revision).run();
       if (!result.meta.changes) return reply({ error: 'conflict' }, 409);

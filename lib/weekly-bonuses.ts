@@ -1,10 +1,10 @@
 import { addDays, madridDay, madridInstant } from './cycles.ts';
 import type { Child, State, Task, Words } from './domain.ts';
+import { childrenOf } from './family.ts';
 
 export type WeeklyPlan = { week: string; startsOn?: string; tasks: Task[]; taskStartsOn?: Record<string, string>; noTaskBonus?: string[] };
 export type WeeklyBonus = { id: string; week: string; child: Child; kind: 'task' | 'super'; taskId?: string; title: string | Words; baseXp: number; xp: number; at: string };
 
-const children: Child[] = ['aina', 'iara'];
 const dayOfWeek = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
 export function bonusWeek(day: string) { return addDays(day, -((dayOfWeek(day) + 6) % 7)); }
 
@@ -75,7 +75,7 @@ export function settleWeeklyBonuses(state: State, now = new Date()) {
     const followingMonday = addDays(plan.week, 7);
     const closed = followingMonday <= today;
     const closedAt = new Date(Date.parse(madridInstant(followingMonday, '00:00')) - 1).toISOString();
-    for (const child of children) {
+    for (const child of childrenOf(state)) {
       const results = plan.tasks.filter(task => !task.once && task.children.includes(child))
         .map(task => ({ task, ...taskResult(state, task, child, plan.week, plan.startsOn) }))
         .filter(result => result.expected > 0);

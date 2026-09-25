@@ -1,6 +1,6 @@
 # Plan: una app para Linux y Sites
 
-Estado: propuesta de implementación, pendiente de ejecutar. Revisado sobre la rama `linux`, commit `28197df`, el 25 de septiembre de 2026.
+Estado: implementación en curso en la rama `linux`. En esta versión pasan typecheck, lint, 53 pruebas y los builds de Node y Sites. El Site nuevo y privado ya está registrado; falta publicar la versión, verificar su URL y subir el commit final a GitHub. Revisión: 26 de septiembre de 2026.
 
 ## Resultado esperado
 
@@ -110,7 +110,7 @@ La protección propia de la familia será independiente de la audiencia configur
 
 ## Fase 6. Dos builds y verificación continua
 
-Añadir comandos explícitos para desarrollo, pruebas y compilación de cada destino. Nombres propuestos: `dev:node`, `build:node`, `start:node`, `dev:sites`, `build:sites`, `test:node` y `test:sites`. Mantener `npm run build` y `npm start` compatibles con el despliegue Linux actual. Estos comandos adicionales aún no existen.
+Hay comandos explícitos `dev:node`, `build:node`, `start:node`, `dev:sites` y `build:sites`; `npm run build` y `npm start` siguen funcionando en Linux. Las pruebas compartidas se ejecutan con `npm test` en ambos builds.
 
 Separar los directorios de salida de Node y Sites. Mantener un lockfile reproducible y documentar dependencias de cada destino. Añadir una comprobación continua que ejecute las reglas compartidas, las pruebas de contrato de cada adaptador, los tipos y los dos builds. El pipeline no publicará automáticamente cambios en producción.
 
@@ -122,7 +122,7 @@ Añadir escenarios de primera instalación en modo demo y personalizado, dos pad
 
 ## Fase 7. Nuevo Site y documentación operativa
 
-El usuario ha eliminado el Site anterior. Durante la implementación se registrará un proyecto nuevo una sola vez y se guardará únicamente su identificador real. No reutilizar `appgprj_6ab45941162081918bad996657dc63ff` ni intentar recuperar la URL anterior mediante ese identificador.
+El usuario eliminó el Site anterior. Se registró una vez el Site nuevo y su identificador real está en `.openai/hosting.json`. El nuevo Site es privado y sus secretos ya están configurados; aún no se ha publicado una versión ni inicializado su familia. No reutilizar el identificador del Site eliminado.
 
 El primer despliegue será privado, con D1 nueva y secretos propios. Arrancará sin familia configurada y mostrará el asistente al primer adulto autorizado, con las opciones personalizado/demo. La opción prevista por el usuario es modo demo; seleccionarla crea la familia predefinida sin actividad previa. Importar progreso será una operación explícita posterior, sin trasladar contraseñas ni sesiones. La comprobación de recursos de autenticación se completará en el entorno real antes de habilitar uso familiar. Se confirmará el estado exitoso del despliegue y la URL devuelta por Sites.
 
