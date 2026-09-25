@@ -2,7 +2,7 @@
 
 Aplicación familiar para convertir misiones y responsabilidades en progreso visible, sin rankings ni penalizaciones. Aina e Iara completan misiones, ganan Xp y proponen misiones y premios; Xavi y Mireia revisan propuestas, asignan precios y gestionan descansos. La interfaz es responsive, usa tema oscuro por defecto, incluye castellano, catalán e inglés, historial, rachas, logros, una casa animada y entrada por voz del navegador. La voz pide confirmación antes de registrar una misión y no envía audio a un LLM.
 
-Esta rama sustituye el runtime de Cloudflare por **Next.js sobre Node.js**, **SQLite local** y autenticación propia. La interfaz y la lógica de dominio se mantienen. El Site publicado en ChatGPT Sites sigue siendo un despliegue aparte y no cambia al trabajar en esta rama.
+Esta rama sustituye el runtime de Cloudflare por **Next.js sobre Node.js**, **SQLite local** y autenticación propia. La interfaz y la lógica de dominio se mantienen. El Site anterior fue eliminado. El [plan para soportar Linux y Sites desde el mismo código](docs/plan-linux-sites.md) incluye la adaptación propuesta y un asistente familiar inicial con modo personalizado o modo demo (la familia actual, sin distintivos visuales). Estas ampliaciones todavía no están implementadas.
 
 ## Stack y persistencia
 
