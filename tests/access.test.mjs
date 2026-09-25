@@ -31,13 +31,15 @@ const compile = (source) => ts.transpileModule(source, { compilerOptions: { targ
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const cycles = moduleUrl(compile(readFileSync('lib/cycles.ts', 'utf8')));
 const weeklyBonuses = moduleUrl(compile(readFileSync('lib/weekly-bonuses.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`));
-const domain = moduleUrl(compile(readFileSync('lib/domain.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './weekly-bonuses.ts'", `from '${weeklyBonuses}'`));
+const discoveries = moduleUrl(compile(readFileSync('lib/discoveries.ts', 'utf8')));
+const domain = moduleUrl(compile(readFileSync('lib/domain.ts', 'utf8')).replace("from './cycles.ts'", `from '${cycles}'`).replace("from './weekly-bonuses.ts'", `from '${weeklyBonuses}'`).replace("from './discoveries.ts'", `from '${discoveries}'`));
 const require = createRequire(import.meta.url);
 const argon2Url = pathToFileURL(require.resolve('argon2')).href;
 const zodUrl = pathToFileURL(require.resolve('zod')).href;
 const stateImport = moduleUrl(compile(readFileSync('lib/state-import.ts', 'utf8'))
   .replace("from 'zod'", `from '${zodUrl}'`)
-  .replace("from './domain'", `from '${domain}'`));
+  .replace("from './domain.ts'", `from '${domain}'`)
+  .replace("from './discoveries.ts'", `from '${discoveries}'`));
 let serverSource = compile(readFileSync('lib/server.ts', 'utf8'))
   .replace("import { getDatabase } from '../db';", 'const getDatabase=()=>globalThis.__taskXpTestDB;')
   .replace("from 'argon2'", `from '${argon2Url}'`)

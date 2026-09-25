@@ -1,5 +1,6 @@
 import { settleCycles, cycleSummary, madridInstant, nextClose, type Cycle, type CycleRule } from './cycles.ts';
-import { settleWeeklyBonuses, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
+import { settleWeeklyBonuses, bonusWeek, includeApprovedTask, plannedTaskForDay, scheduledTasksForDay, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
+import { CLIENT_DISCOVERIES, DISCOVERY_IDS, discoveryWords, objectiveDiscoveryCandidates, type DiscoveryId } from './discoveries.ts';
 export type Lang = 'es' | 'ca' | 'en';
 export type Child = 'aina' | 'iara';
 export type Person = Child | 'xavi' | 'mireia';
@@ -58,8 +59,8 @@ export function availableSuperBonus(s: State, child: Child, rewardId: string) {
     .sort((a,b) => b.week.localeCompare(a.week))
     .find(bonus => !s.redemptions.some(redemption => redemption.child === child && redemption.rewardId === rewardId && redemption.bonusWeek === bonus.week && redemption.status !== 'cancelled'));
 }
-export function due(t: Task, child: Child, day: string, s: State) { return t.status === 'approved' && t.children.includes(child) && (t.once || t.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (t.once ? !s.completions.some(c => c.taskId === t.id && c.child === child && !c.reversed) : t.cadence === 'weekly' ? completed(s,t,child,day) < t.limit : true); }
-export function completed(s: State, t: Task, child: Child, day: string) { const week=t.cadence==='weekly'?weekBeginning(day,1):null; return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (t.once || (week ? c.day>=week&&c.day<=shiftDay(week,6) : c.day === day))).length; }
+export function due(t: Task, child: Child, day: string, s: State) { const plan=s.weeklyPlans?.find(item=>item.week===bonusWeek(day));const planned=plan&&day>=(plan.startsOn??plan.week)?plannedTaskForDay(s,t.id,day):null;const scheduled=planned??(t.once||!plan||day<(plan.startsOn??plan.week)?t:null);return !!scheduled && scheduled.status === 'approved' && scheduled.children.includes(child) && (scheduled.once || scheduled.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (scheduled.once ? !s.completions.some(c => c.taskId === scheduled.id && c.child === child && !c.reversed) : scheduled.cadence === 'weekly' ? completed(s,scheduled,child,day) < scheduled.limit : true); }
+export function completed(s: State, t: Task, child: Child, day: string) { const scheduled=plannedTaskForDay(s,t.id,day)??t;const week=scheduled.cadence==='weekly'?weekBeginning(day,1):null; return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (scheduled.once || (week ? c.day>=week&&c.day<=shiftDay(week,6) : c.day === day))).length; }
 const w = (es: string, ca: string, en: string): Words => ({ es, ca, en });
 export function initialState(now = new Date().toISOString()): State {
   const base = { children: ['aina', 'iara'] as Child[], days: [0,1,2,3,4,5,6], once: false, limit: 1, status: 'approved' as Status, author: 'xavi' as Person, note: '', created: now };
@@ -113,14 +114,16 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   if(a.type === 'complete') {
     const child = childFor(); const day = dayValue(a.day ?? today);
     requireThat(day <= today && (parent ? day >= shiftDay(today,-31) : day === today),'date');
-    const t = s.tasks.find(x=>x.id===a.taskId); requireThat(t,'missing');
+    const t = scheduledTasksForDay(s,day).find(x=>x.id===a.taskId)??s.tasks.find(x=>x.id===a.taskId); requireThat(t,'missing');
     requireThat(due(t!,child,day,s),'notDue'); requireThat(!s.pauses.some(p=>!p.cancelledAt&&p.child===child&&day>=p.from&&day<=p.to),'paused');
     requireThat(completed(s,t!,child,day)<t!.limit,'already');
     s.completions.push({id:a.requestId, taskId:t!.id,child,title:t!.title,xp:t!.xp,originalXP:t!.xp,icon:t!.icon,category:t!.category,day,at,effectiveAt:day===today?at:madridInstant(day,typeof a.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(a.time)?a.time:'12:00'),actor,reversed:false}); log=words(t!.title);
   } else if(a.type === 'egg') {
     const child=childFor(), egg=text(a.egg,40); requireThat(/^[a-z0-9-]+$/.test(egg));
+    requireThat((DISCOVERY_IDS as readonly string[]).includes(egg),'invalid');
+    requireThat(CLIENT_DISCOVERIES.has(egg as DiscoveryId)||objectiveDiscoveryCandidates(s,child,today).includes(egg as DiscoveryId),'notDue');
     requireThat(!s.completions.some(c=>c.taskId===`egg-${egg}`&&c.child===child),'already');
-    s.completions.push({id:a.requestId,taskId:`egg-${egg}`,child,title:w('Huevo de Pascua','Ou de Pasqua','Easter egg'),xp:1,originalXP:1,icon:'sparkles',category:'afternoon',day:today,at,effectiveAt:at,actor,reversed:false});log='Huevo de Pascua';
+    s.completions.push({id:a.requestId,taskId:`egg-${egg}`,child,title:discoveryWords(egg as DiscoveryId),xp:1,originalXP:1,icon:'sparkles',category:'afternoon',day:today,at,effectiveAt:at,actor,reversed:false});log='Descubrimiento';
   } else if(a.type === 'reverse' || a.type === 'uncomplete' || a.type === 'undoAdjustment') {
     const c = s.completions.find(x=>x.id===a.id); requireThat(c,'missing');
     if(a.type==='reverse') requireParent();
@@ -152,6 +155,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
       const cadence: NonNullable<Task['cadence']> = a.cadence==='weekly'?'weekly':'daily';
       const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit,cadence};
       s.tasks=old?s.tasks.map(x=>x.id===old.id?next:x):[...s.tasks,next];
+      includeApprovedTask(s,next,today);
     } else {
       const reward={...item,requiresSuperBonus:parent&&a.requiresSuperBonus===true};
       s.rewards=old?s.rewards.map(x=>x.id===old.id?reward:x):[...s.rewards,reward];
@@ -163,6 +167,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     requireThat(['approved','changes','archived'].includes(String(a.status)));
     if(a.status==='approved') requireThat(item!.xp>0 || (a.kind==='reward' && (item as Reward).requiresSuperBonus),'price');
     item!.status=a.status as Status; item!.note=optional(a.note,300); if(a.status==='changes') requireThat(item!.note.length>0);
+    if(a.kind==='task' && a.status==='approved') includeApprovedTask(s,item as Task,today);
     log=words(item!.title);
   } else if(a.type === 'redeem') {
     const child=childFor(); const r=s.rewards.find(x=>x.id===a.rewardId); requireThat(r&&r.status==='approved'&&r.children.includes(child),'missing');
@@ -248,7 +253,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   }
   settleWeeklyBonuses(s,now);
   s.badges ??= [];
-  for(const child of ['aina','iara'] as Child[])for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
+  for(const child of ['aina','iara'] as Child[])for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed&&!c.taskId.startsWith('egg-')).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
   s.processed.push(a.requestId);
   if(a.type!=='preference'&&a.type!=='celebrationSeen') s.audit.push({at,actor,action:a.type,title:log});
   return s;

@@ -1,0 +1,11 @@
+.discovery-dialog { text-align:center; max-width:390px; display:flex; flex-direction:column; align-items:center; gap:12px; padding:32px 28px; }
+.discovery-dialog .discovery-icon { width:76px; height:76px; border-radius:25px; display:grid; place-items:center; color:#8be2d5; background:linear-gradient(145deg,#1b716e,#283547); box-shadow:0 0 0 8px #6de2d012,0 16px 35px #0005; }
+.discovery-dialog.theme-iara .discovery-icon { color:#e1bcff; background:linear-gradient(145deg,#704294,#3d3155); box-shadow:0 0 0 8px #d1a5ff18,0 16px 35px #0005; }
+.discovery-dialog h2 { font-size:1.45rem; font-weight:800; line-height:1.2; }
+.discovery-dialog>strong { color:#8be2d5; font-size:1.6rem; }
+.discovery-dialog.theme-iara>strong { color:#e1bcff; }
+.discovery-dialog .primary { margin-top:8px; }
+.discovery-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; padding:12px 0 0; list-style:none; }
+.discovery-list li { display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid #39455b; border-radius:10px; }
+.discovery-list svg { flex:none; color:#8be2d5; }
+.theme-iara .discovery-list svg { color:#e1bcff; }

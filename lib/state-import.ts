@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { DomainError, migrateState, type State } from './domain';
+import { DomainError, migrateState, type State } from './domain.ts';
+import { DISCOVERY_IDS } from './discoveries.ts';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   const parsed=new Date(`${value}T12:00:00Z`);
@@ -12,12 +13,12 @@ const words = z.union([z.string(),z.object({ es:z.string(),ca:z.string(),en:z.st
 const status = z.enum(['pending','changes','approved','archived']);
 const task = z.object({ id:z.string(),title:words,description:words,xp:z.number().int().min(1).max(100),category:z.enum(['all-day','morning','afternoon','evening']),children:z.array(child).min(1).max(2),days:z.array(z.number().int().min(0).max(6)).max(7),once:z.boolean(),limit:z.number().int().min(1).max(5),cadence:z.enum(['daily','weekly']).optional(),status,author:person,note:z.string(),icon:z.string(),created:instant }).strict();
 const reward = z.object({ id:z.string(),title:words,description:words,xp:z.number().int().min(0).max(10000),requiresSuperBonus:z.boolean().optional(),children:z.array(child).min(1).max(2),status,author:person,note:z.string(),icon:z.string(),limit:z.number().int().min(1).max(99),created:instant }).strict();
-const adjustment = z.object({ id:z.string(),at:instant,actor:person,from:z.number().int().min(0),to:z.number().int().min(0),reason:z.string(),undoneBy:z.string().optional(),undoOf:z.string().optional() }).strict();
-const completion = z.object({ id:z.string(),taskId:z.string(),child,title:words,xp:z.number().int().min(0),day:date,at:instant,actor:person,reversed:z.boolean(),reason:z.string().optional(),correctedBy:person.optional(),originalXP:z.number().int().min(0).optional(),icon:z.string().optional(),category:z.enum(['all-day','morning','afternoon','evening']).optional(),effectiveAt:instant.optional(),adjustments:z.array(adjustment).optional() }).strict();
+const adjustment = z.object({ id:z.string(),at:instant,actor:person,from:z.number().int().min(0).max(100),to:z.number().int().min(0).max(100),reason:z.string(),undoneBy:z.string().optional(),undoOf:z.string().optional() }).strict();
+const completion = z.object({ id:z.string(),taskId:z.string(),child,title:words,xp:z.number().int().min(0).max(100),day:date,at:instant,actor:person,reversed:z.boolean(),reason:z.string().optional(),correctedBy:person.optional(),originalXP:z.number().int().min(0).max(100).optional(),icon:z.string().optional(),category:z.enum(['all-day','morning','afternoon','evening']).optional(),effectiveAt:instant.optional(),adjustments:z.array(adjustment).optional() }).strict();
 const redemption = z.object({ id:z.string(),rewardId:z.string(),child,title:words,xp:z.number().int().min(0),bonusWeek:date.optional(),status:z.enum(['pending','confirmed','fulfilled','cancelled']),at:instant,note:z.string(),actor:person.optional() }).strict();
 const pause = z.object({ id:z.string(),child,from:date,to:date,reason:z.string(),cancelledAt:instant.optional() }).strict();
-const weeklyPlan = z.object({ week:date,startsOn:date.optional(),tasks:z.array(task) }).strict();
-const weeklyBonus = z.object({ id:z.string(),week:date,child,kind:z.enum(['task','super']),taskId:z.string().optional(),title:words,baseXp:z.number().int().min(0),xp:z.number().int().min(0),at:instant }).strict();
+const weeklyPlan = z.object({ week:date,startsOn:date.optional(),tasks:z.array(task),taskStartsOn:z.record(date).optional(),noTaskBonus:z.array(z.string()).optional() }).strict();
+const weeklyBonus = z.object({ id:z.string(),week:date,child,kind:z.enum(['task','super']),taskId:z.string().optional(),title:words,baseXp:z.number().int().min(0).max(10_000_000),xp:z.number().int().min(0).max(40_000_000),at:instant }).strict();
 const cycleRule = z.object({ day:z.number().int().min(0).max(6),time:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/) }).strict();
 const cycle = cycleRule.extend({ id:instant,start:instant,end:instant,closed:z.boolean().optional(),snapshot:z.object({ aina:z.object({xp:z.number().int(),tasks:z.number().int().min(0)}).strict(),iara:z.object({xp:z.number().int(),tasks:z.number().int().min(0)}).strict() }).strict().optional(),reconstructed:z.boolean().optional() }).strict();
 const change = z.object({ id:z.string(),at:instant,actor:person,title:z.string(),collection:z.enum(['tasks','rewards','pauses','redemptions']),key:z.string(),before:z.union([task,reward,pause,redemption]).optional(),after:z.union([task,reward,pause,redemption]).optional(),undoneBy:z.string().optional() }).strict();
@@ -33,6 +34,24 @@ export function parseExportedState(value: unknown): State {
   const state = migrateState(envelope.data.data as State);
   for (const list of [state.tasks,state.rewards,state.completions,state.redemptions,state.pauses]) {
     if (new Set(list.map(item => item.id)).size !== list.length) throw new DomainError('invalidBackup');
+  }
+  const knownTasks = new Set([...state.tasks,...(state.weeklyPlans??[]).flatMap(plan=>plan.tasks)].map(item=>item.id));
+  const knownRewards = new Set(state.rewards.map(item=>item.id));
+  const discoveries = new Set<string>(DISCOVERY_IDS);
+  if (state.completions.some(item=>item.xp>(item.originalXP??item.xp)||item.reversed!== (item.xp===0)||(
+    item.taskId.startsWith('egg-') ? !discoveries.has(item.taskId.slice(4)) || item.originalXP!==undefined&&item.originalXP!==1 : !knownTasks.has(item.taskId)
+  ))) throw new DomainError('invalidBackup');
+  const discoveryClaims=state.completions.filter(item=>item.taskId.startsWith('egg-')).map(item=>`${item.child}:${item.taskId}`);
+  if(new Set(discoveryClaims).size!==discoveryClaims.length) throw new DomainError('invalidBackup');
+  if (state.redemptions.some(item=>!knownRewards.has(item.rewardId))) throw new DomainError('invalidBackup');
+  const plans=state.weeklyPlans??[];
+  if(new Set(plans.map(plan=>plan.week)).size!==plans.length) throw new DomainError('invalidBackup');
+  for(const plan of plans){
+    const end=new Date(plan.week+'T12:00:00Z');end.setUTCDate(end.getUTCDate()+6);const last=end.toISOString().slice(0,10);
+    const ids=new Set(plan.tasks.map(item=>item.id));
+    if(new Date(plan.week+'T12:00:00Z').getUTCDay()!==1 || plan.startsOn && (plan.startsOn<plan.week||plan.startsOn>last) || ids.size!==plan.tasks.length) throw new DomainError('invalidBackup');
+    if(Object.entries(plan.taskStartsOn??{}).some(([id,day])=>!ids.has(id)||day<plan.week||day>last)) throw new DomainError('invalidBackup');
+    if((plan.noTaskBonus??[]).some(id=>!ids.has(id))) throw new DomainError('invalidBackup');
   }
   return state;
 }
