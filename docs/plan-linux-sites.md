@@ -1,6 +1,6 @@
 # Plan: una app para Linux y Sites
 
-Estado: implementación completada en la rama `linux`. Pasan typecheck, lint, 53 pruebas y los builds de Node y Sites. El Site se publicó de forma privada y la rama `linux` está actualizada en GitHub. Revisión: 26 de septiembre de 2026.
+Estado: implementación completada en la rama predeterminada `main` (el trabajo comenzó en `linux`). Pasan typecheck, lint, 53 pruebas y los builds de Node y Sites. El Site se publicó de forma privada y `main` está actualizada en GitHub. Revisión: 26 de septiembre de 2026.
 
 ## Resultado esperado
 
@@ -15,7 +15,7 @@ Ambos destinos incluirán el mismo asistente de primera instalación para un adu
 
 Cada instalación mantiene sus propios datos, secretos y sesiones. Compartir código no sincroniza las bases. Se reutiliza el formato de exportación/importación de progreso; las credenciales se configuran en cada instalación. La sincronización automática y un backend compartido quedan fuera del alcance.
 
-La rama `linux` contiene los cambios recientes y será la base. `main` sirve como referencia de la integración anterior de Sites; no se reemplazará la lógica actual por la antigua. Se desarrollará un solo producto, con comprobaciones para los dos destinos en cada cambio. No se mantendrán dos implementaciones de las reglas de Xp.
+La rama `main` contiene ahora la implementación común para Linux y Sites. Se desarrollará un solo producto, con comprobaciones para los dos destinos en cada cambio. No se mantendrán dos implementaciones de las reglas de Xp.
 
 ## Lo que ya facilita la adaptación
 

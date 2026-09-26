@@ -2,9 +2,9 @@
 
 ## ES · Preparación y publicación
 
-La rama `linux` también genera un Worker para Sites. El proyecto Site actual se identifica exclusivamente por `.openai/hosting.json`; **no reutilices identificadores del Site eliminado**. El Site nuevo es privado. Su D1, secretos y sesiones son independientes de Linux.
+La rama `main` también genera un Worker para Sites. El proyecto Site actual se identifica exclusivamente por `.openai/hosting.json`; **no reutilices identificadores del Site eliminado**. El Site nuevo es privado. Su D1, secretos y sesiones son independientes de Linux.
 
-1. En el checkout de la rama `linux`: `npm ci`, `npm run typecheck`, `npm test`, `npm run build:sites`. El build crea `dist/server`, `dist/client` y `dist/.openai` con las migraciones. No subas `dist/` a GitHub.
+1. En el checkout de la rama `main`: `npm ci`, `npm run typecheck`, `npm test`, `npm run build:sites`. El build crea `dist/server`, `dist/client` y `dist/.openai` con las migraciones. No subas `dist/` a GitHub.
 2. En Sites, configura `SESSION_SECRET` (32 bytes aleatorios codificados en 64 hexadecimales) y otro `TASK_XP_SETUP_TOKEN` distinto, ambos como secretos. No los guardes en Git. `PUBLIC_ORIGIN` es opcional en Sites: si se omite, la API compara `Origin` con la URL de la petición. Los cambios de variables requieren una nueva publicación.
 3. Publica con el plugin Sites y su flujo de fuente, build y versión privada. El despliegue aplica por orden los SQL de `drizzle/` a D1 antes de subir el Worker. Verifica que el estado de despliegue sea `succeeded` y que `/api/xp` devuelva `initialized:false` antes del alta.
 4. En la primera visita selecciona modo demo o personalizado, introduce el token de alta y una contraseña familiar nueva. Guarda las combinaciones animales. Tras la primera entrada familiar correcta, la copia cifrada de los códigos se elimina. Puedes retirar el token de alta del entorno y volver a publicar; una base ya inicializada rechaza otra creación.
@@ -23,7 +23,7 @@ Para desarrollo crea `.dev.vars` (ignorado por Git) con `SESSION_SECRET` y `TASK
 
 ## EN · Deploy and operate
 
-The `linux` branch also builds a Worker for Sites. The **new private Site** is identified by `.openai/hosting.json`. Its D1 database, secrets and sessions are separate from Linux.
+The `main` branch also builds a Worker for Sites. The **new private Site** is identified by `.openai/hosting.json`. Its D1 database, secrets and sessions are separate from Linux.
 
 1. Run `npm ci`, `npm run typecheck`, `npm test`, `npm run build:sites`. The build emits the Worker, assets, hosting manifest and SQL migrations under `dist/`.
 2. Set two different Site secrets: `SESSION_SECRET` (32 random bytes as 64 hex characters) and `TASK_XP_SETUP_TOKEN` (first-run authorization). `PUBLIC_ORIGIN` is optional on Sites; if omitted, the request URL supplies the expected origin. Redeploy after changing environment values.

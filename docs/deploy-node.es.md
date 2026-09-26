@@ -62,7 +62,7 @@ npm run build
 
 ## Despliegue en `erik` y `mark`
 
-El servidor obtiene solo el código de la rama `linux` desde GitHub. No copies el directorio de trabajo de Windows: `node_modules`, `.next`, `data`, las bases SQLite y `.env.local` están ignorados por Git. `npm ci` descarga las dependencias para ARM64 en `erik` y `npm run build` genera allí `.next`; reserva espacio en disco para ambos. Conserva `/var/lib/taskxp` y `.env.local` al actualizar. Si el repositorio es privado, configura acceso de lectura a GitHub para el usuario de despliegue antes de clonar.
+El servidor obtiene solo el código de la rama `main` desde GitHub. No copies el directorio de trabajo de Windows: `node_modules`, `.next`, `data`, las bases SQLite y `.env.local` están ignorados por Git. `npm ci` descarga las dependencias para ARM64 en `erik` y `npm run build` genera allí `.next`; reserva espacio en disco para ambos. Conserva `/var/lib/taskxp` y `.env.local` al actualizar. Si el repositorio es privado, configura acceso de lectura a GitHub para el usuario de despliegue antes de clonar.
 
 ### 1. Preparar `erik`
 
@@ -71,12 +71,12 @@ Crea un usuario de sistema dedicado y directorios persistentes; ajusta la IP de 
 ```sh
 sudo useradd --system --home /opt/taskxp --shell /usr/sbin/nologin taskxp
 sudo install -d -o taskxp -g taskxp -m 0750 /opt/taskxp /var/lib/taskxp
-sudo -u taskxp git clone --depth 1 --branch linux https://github.com/hyperxaa/task-experience.git /opt/taskxp
+sudo -u taskxp git clone --depth 1 --branch main https://github.com/hyperxaa/task-experience.git /opt/taskxp
 cd /opt/taskxp
 sudo -u taskxp npm ci
 ```
 
-Si el repositorio ya está clonado, usa `git fetch origin && git switch linux && git pull --ff-only` en vez de clonar de nuevo.
+Si el repositorio ya está clonado, usa `git fetch origin && git switch main && git pull --ff-only` en vez de clonar de nuevo.
 
 Crea `/opt/taskxp/.env.local`, propiedad de `taskxp`, permisos `0600`. Genera dos secretos diferentes con `openssl rand -hex 32` y rellena:
 
@@ -207,7 +207,7 @@ cd /opt/taskxp
 sudo -u taskxp env DATABASE_URL=/var/lib/taskxp/taskxp.db npm run backup
 sudo -u taskxp git fetch origin
 sudo systemctl stop taskxp
-sudo -u taskxp git switch linux
+sudo -u taskxp git switch main
 sudo -u taskxp git pull --ff-only
 sudo -u taskxp npm ci
 sudo -u taskxp npm run typecheck
