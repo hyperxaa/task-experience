@@ -84,15 +84,15 @@ function Resident({name,hair,color,time,plan,running,sleeping,task,xp,custom}:{n
   </g>;
 }
 function HairBack({name}:{name:HousePerson}){
-  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.2" strokeLinejoin="round"><path d="M-6-10Q-13-9-11-2Q-14 3-11 7Q-13 12-8 15Q-3 14-5 8Q-7 3-6-10ZM6-10Q13-9 11-2Q14 3 11 7Q13 12 8 15Q3 14 5 8Q7 3 6-10Z"/><path d="M-10 2q4-2 4 2t-3 4m15-4q-4-2-4 2t3 4" fill="none" stroke="#fff0a6" strokeWidth="1.4"/></g>;
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.2" strokeLinejoin="round"><path d="M-6-10Q-13-9-11-2Q-14 2-11 6Q-13 9-8 11Q-3 10-5 6Q-7 2-6-10ZM6-10Q13-9 11-2Q14 2 11 6Q13 9 8 11Q3 10 5 6Q7 2 6-10Z"/><path d="M-10 1q4-2 4 2t-3 3m15-3q-4-2-4 2t3 3" fill="none" stroke="#fff0a6" strokeWidth="1.4"/></g>;
   if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-9Q-12-7-10-1Q-12 3-9 7L-6 5V-9ZM6-9Q12-7 10-1Q12 3 9 7L6 5V-9Z"/><path d="M-9-14Q-14-16-13-11Q-12-7-8-9ZM9-14Q14-16 13-11Q12-7 8-9Z"/></g>;
-  if(name==='X')return <path d="M-8-7Q-8-12-4-12Q0-15 4-12Q8-11 8-7L6-2H-6Z" fill="#493027" stroke="#2f201c" strokeWidth="1.3" strokeLinejoin="round"/>;
-  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-10Q-12-9-10-3Q-13 1-10 6Q-12 10-7 11Q-3 9-5 4Q-7 0-6-10ZM6-10Q12-9 10-3Q13 1 10 6Q12 10 7 11Q3 9 5 4Q7 0 6-10Z"/><path d="M-9 1q4-2 3 2t-3 3m12-3q-4-2-3 2t3 3" fill="none" stroke="#f6e6ab" strokeWidth="1.3"/></g>;
+  if(name==='X')return <path d="M-7-7Q-7-11-4-11Q0-13 4-11Q7-10 7-7L5-2H-5Z" fill="#493027" stroke="#2f201c" strokeWidth="1.3" strokeLinejoin="round"/>;
+  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-10Q-12-9-10-3Q-13 0-10 4Q-12 7-7 8Q-3 7-5 3Q-7 0-6-10ZM6-10Q12-9 10-3Q13 0 10 4Q12 7 7 8Q3 7 5 3Q7 0 6-10Z"/><path d="M-9 0q4-2 3 2t-3 2m12-2q-4-2-3 2t3 2" fill="none" stroke="#f6e6ab" strokeWidth="1.3"/></g>;
 }
 function HairFront({name}:{name:HousePerson}){
-  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-3-15 0-12Q3-15 5-12Q9-11 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-5" cy="-11" r="2.1"/><circle cx="1" cy="-12" r="2"/><circle cx="6" cy="-10" r="2"/></g>;
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-10-5-11Q-3-13 0-11Q3-13 5-11Q9-10 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-5" cy="-10" r="1.8"/><circle cx="1" cy="-11" r="1.8"/><circle cx="6" cy="-9" r="1.8"/></g>;
   if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-10" cy="-13" r="3.1"/><circle cx="10" cy="-13" r="3.1"/></g>;
-  if(name==='X')return <g fill="#493027" stroke="#2f201c" strokeWidth="1.2" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-15 1-12Q5-14 8-9L8-5Q5-8 2-6Q0-9-3-6Q-6-8-8-5Z"/><path d="M-8-5L-7 1M8-6L7 0"/></g>;
+  if(name==='X')return <g fill="#493027" stroke="#2f201c" strokeWidth="1.2" strokeLinejoin="round"><path d="M-7-5Q-8-10-5-11Q-2-13 1-11Q5-12 7-8L7-5Q4-7 2-6Q0-8-3-6Q-5-7-7-5Z"/><path d="M-7-5L-6 0M7-5L6 0"/></g>;
   return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><path d="M-8-5Q-9-1-7 1M8-5Q9-1 7 1" fill="none" stroke="#f6e6ab" strokeWidth="1.6"/></g>;
 }
 function Cat({time,plan,running,sleeping}:{time:number;plan:MotionPlan;running:boolean;sleeping:boolean}){
