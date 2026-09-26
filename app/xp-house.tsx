@@ -84,16 +84,16 @@ function Resident({name,hair,color,time,plan,running,sleeping,task,xp,custom}:{n
   </g>;
 }
 function HairBack({name}:{name:HousePerson}){
-  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.2" strokeLinejoin="round"><path d="M-6-10Q-13-9-11-2Q-14 2-11 6Q-13 9-8 11Q-3 10-5 6Q-7 2-6-10ZM6-10Q13-9 11-2Q14 2 11 6Q13 9 8 11Q3 10 5 6Q7 2 6-10Z"/><path d="M-10 1q4-2 4 2t-3 3m15-3q-4-2-4 2t3 3" fill="none" stroke="#fff0a6" strokeWidth="1.4"/></g>;
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-7-10Q-13-9-12-3Q-14 1-12 5Q-14 10-10 13Q-6 14-5 9L-5-5Q0-8 5-5L5 9Q6 14 10 13Q14 10 12 5Q14 1 12-3Q13-9 7-10Z"/><path d="M-11 1Q-8 3-10 7M-10 9Q-8 11-7 12M11 1Q8 3 10 7M10 9Q8 11 7 12" fill="none" stroke="#fff0a6" strokeWidth="1.2"/></g>;
   if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-9Q-12-7-10-1Q-12 3-9 7L-6 5V-9ZM6-9Q12-7 10-1Q12 3 9 7L6 5V-9Z"/><path d="M-9-14Q-14-16-13-11Q-12-7-8-9ZM9-14Q14-16 13-11Q12-7 8-9Z"/></g>;
   if(name==='X')return <path d="M-7-7Q-7-11-4-11Q0-13 4-11Q7-10 7-7L5-2H-5Z" fill="#493027" stroke="#2f201c" strokeWidth="1.3" strokeLinejoin="round"/>;
-  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-10Q-12-9-10-3Q-13 0-10 4Q-12 7-7 8Q-3 7-5 3Q-7 0-6-10ZM6-10Q12-9 10-3Q13 0 10 4Q12 7 7 8Q3 7 5 3Q7 0 6-10Z"/><path d="M-9 0q4-2 3 2t-3 2m12-2q-4-2-3 2t3 2" fill="none" stroke="#f6e6ab" strokeWidth="1.3"/></g>;
+  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-7-10Q-13-9-12-3Q-14 1-12 5Q-13 9-10 11Q-7 13-5 9L-5-5Q0-8 5-5L5 9Q7 13 10 11Q13 9 12 5Q14 1 12-3Q13-9 7-10Z"/><path d="M-11 0Q-8 2-10 5M-10 7Q-8 9-7 11M11 0Q8 2 10 5M10 7Q8 9 7 11" fill="none" stroke="#f6e6ab" strokeWidth="1.2"/></g>;
 }
 function HairFront({name}:{name:HousePerson}){
-  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-10-5-11Q-3-13 0-11Q3-13 5-11Q9-10 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-5" cy="-10" r="1.8"/><circle cx="1" cy="-11" r="1.8"/><circle cx="6" cy="-9" r="1.8"/></g>;
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-7Q-10-11-6-12Q0-15 6-12Q10-11 8-7Q4-9 0-9Q-4-9-8-7Z"/><path d="M-6-12Q-3-14 0-12Q3-14 6-12" fill="none" stroke="#fff0a6" strokeWidth="1.2"/></g>;
   if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-10" cy="-13" r="3.1"/><circle cx="10" cy="-13" r="3.1"/></g>;
-  if(name==='X')return <g fill="#493027" stroke="#2f201c" strokeWidth="1.2" strokeLinejoin="round"><path d="M-7-5Q-8-10-5-11Q-2-13 1-11Q5-12 7-8L7-5Q4-7 2-6Q0-8-3-6Q-5-7-7-5Z"/><path d="M-7-5L-6 0M7-5L6 0"/></g>;
-  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><path d="M-8-5Q-9-1-7 1M8-5Q9-1 7 1" fill="none" stroke="#f6e6ab" strokeWidth="1.6"/></g>;
+  if(name==='X')return <g fill="#493027" stroke="#2f201c" strokeWidth="1.2" strokeLinejoin="round"><path d="M-7-8Q-8-11-5-12Q0-14 5-12Q8-10 7-8Q3-9 0-9Q-4-9-7-8Z"/><path d="M-7-8L-6-7M7-8L6-7"/></g>;
+  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-7Q-10-11-6-12Q0-15 6-12Q10-11 8-7Q4-9 0-9Q-4-9-8-7Z"/><path d="M-5-12Q0-14 5-12" fill="none" stroke="#f6e6ab" strokeWidth="1.2"/></g>;
 }
 function Cat({time,plan,running,sleeping}:{time:number;plan:MotionPlan;running:boolean;sleeping:boolean}){
   const {point:[x,y],idleFor}=sampleCat(plan,time);
