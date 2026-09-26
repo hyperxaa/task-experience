@@ -55,6 +55,47 @@ test('only real discoveries can be awarded, and progress discoveries need progre
   assert.equal(state.badges.filter(b=>b.child==='aina'&&b.threshold===1).length,1);
 });
 
+test('parents and children cannot award discoveries to a child profile',()=>{
+  const state=small();
+  assert.throws(()=>action(state,'xavi','adult-egg-1','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'}),/forbidden/);
+  assert.throws(()=>action(state,'aina','sibling-egg-1','2026-09-21',{type:'egg',child:'iara',egg:'kind-heart'}),/forbidden/);
+});
+
+test('period egg reset preserves its history, permits a fresh award and blocks undo after rediscovery',()=>{
+  let state=small();
+  state=action(state,'aina','bed-before-egg','2026-09-21',{type:'complete',child:'aina',taskId:'bed'});
+  state=action(state,'aina','kind-heart-before','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'});
+  state=action(state,'xavi','reset-kind-heart','2026-09-21',{type:'resetEggsPeriod',child:'aina',scope:'day',day:'2026-09-21'});
+  const old=state.completions.find(item=>item.taskId==='egg-kind-heart');
+  assert.equal(old.xp,0);assert.equal(old.reversed,true);assert.equal(old.discoveryReset.actor,'xavi');
+  assert.equal(old.adjustments.at(-1).reason,'Restablecimiento de huevos de pascua del periodo');
+  state=action(state,'aina','kind-heart-after','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'});
+  assert.equal(state.completions.filter(item=>item.taskId==='egg-kind-heart'&&!item.discoveryReset).length,1);
+  assert.equal(totals(state,'aina').xp,3);
+  assert.throws(()=>action(state,'xavi','undo-reset-kind-heart','2026-09-21',{type:'undoAdjustment',id:old.id}),/conflict/);
+});
+
+test('period egg reset is isolated to selected child and period and accepts repeated historical claims on import',()=>{
+  let state=small();
+  state=action(state,'aina','monday-bed','2026-09-21',{type:'complete',child:'aina',taskId:'bed'});
+  state=action(state,'aina','monday-egg','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'});
+  state=action(state,'iara','tuesday-egg','2026-09-22',{type:'egg',child:'iara',egg:'kind-heart'});
+  state=action(state,'xavi','reset-monday','2026-09-22',{type:'resetEggsPeriod',child:'aina',scope:'day',day:'2026-09-21'});
+  assert.equal(state.completions.find(item=>item.id==='monday-egg').discoveryReset.actor,'xavi');
+  assert.equal(state.completions.find(item=>item.id==='tuesday-egg').discoveryReset,undefined);
+  state=action(state,'aina','tuesday-rediscover','2026-09-22',{type:'egg',child:'aina',egg:'kind-heart'});
+  const imported=parseExportedState({exportedAt:at('2026-09-22').toISOString(),data:state});
+  assert.equal(imported.completions.filter(item=>item.taskId==='egg-kind-heart'&&!item.discoveryReset).length,2);
+  let weekState=small();
+  weekState=action(weekState,'aina','week-egg-1','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'});
+  weekState=action(weekState,'xavi','week-reset','2026-09-22',{type:'resetEggsPeriod',child:'aina',scope:'week',day:'2026-09-22'});
+  assert.equal(weekState.completions[0].discoveryReset.actor,'xavi');
+  let monthState=small();
+  monthState=action(monthState,'aina','month-egg-1','2026-09-21',{type:'egg',child:'aina',egg:'kind-heart'});
+  monthState=action(monthState,'xavi','month-reset','2026-09-22',{type:'resetEggsPeriod',child:'aina',scope:'month',day:'2026-09-22'});
+  assert.equal(monthState.completions[0].discoveryReset.actor,'xavi');
+});
+
 test('backup import rejects forged Xp and unknown missions',()=>{
   const state=small();
   state.completions.push({id:'forged-1',taskId:'invented',child:'aina',title:'Inventada',xp:1,day:'2026-09-21',at:at('2026-09-21').toISOString(),actor:'aina',reversed:false});

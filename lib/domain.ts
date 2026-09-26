@@ -10,7 +10,7 @@ export type Words = { es: string; ca: string; en: string };
 export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; cadence?: 'daily' | 'weekly'; status: Status; author: Person; note: string; icon: string; created: string };
 export type Reward = { id: string; title: string | Words; description: string | Words; xp: number; requiresSuperBonus?: boolean; children: Child[]; status: Status; author: Person; note: string; icon: string; limit: number; created: string };
 export type Adjustment = { id: string; at: string; actor: Person; from: number; to: number; reason: string; undoneBy?: string; undoOf?: string };
-export type Completion = { id: string; taskId: string; child: Child; title: string | Words; xp: number; day: string; at: string; actor: Person; reversed: boolean; reason?: string; correctedBy?: Person; originalXP?: number; icon?: string; category?: Task['category']; effectiveAt?: string; adjustments?: Adjustment[] };
+export type Completion = { id: string; taskId: string; child: Child; title: string | Words; xp: number; day: string; at: string; actor: Person; reversed: boolean; reason?: string; correctedBy?: Person; originalXP?: number; icon?: string; category?: Task['category']; effectiveAt?: string; adjustments?: Adjustment[]; discoveryReset?: { at: string; actor: Person; requestId: string } };
 export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
@@ -131,10 +131,10 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     requireThat(completed(s,t!,child,day)<t!.limit,'already');
     s.completions.push({id:a.requestId, taskId:t!.id,child,title:t!.title,xp:t!.xp,originalXP:t!.xp,icon:t!.icon,category:t!.category,day,at,effectiveAt:day===today?at:madridInstant(day,typeof a.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(a.time)?a.time:'12:00'),actor,reversed:false}); log=words(t!.title);
   } else if(a.type === 'egg') {
-    const child=childFor(), egg=text(a.egg,40); requireThat(/^[a-z0-9-]+$/.test(egg));
+    const child=childFor(), egg=text(a.egg,40); requireThat(!parent&&actor===child,'forbidden'); requireThat(/^[a-z0-9-]+$/.test(egg));
     requireThat((DISCOVERY_IDS as readonly string[]).includes(egg),'invalid');
     requireThat(CLIENT_DISCOVERIES.has(egg as DiscoveryId)||objectiveDiscoveryCandidates(s,child,today).includes(egg as DiscoveryId),'notDue');
-    requireThat(!s.completions.some(c=>c.taskId===`egg-${egg}`&&c.child===child),'already');
+    requireThat(!s.completions.some(c=>c.taskId===`egg-${egg}`&&c.child===child&&!c.discoveryReset),'already');
     s.completions.push({id:a.requestId,taskId:`egg-${egg}`,child,title:discoveryWords(egg as DiscoveryId),xp:1,originalXP:1,icon:'sparkles',category:'afternoon',day:today,at,effectiveAt:at,actor,reversed:false});log='Descubrimiento';
   } else if(a.type === 'reverse' || a.type === 'uncomplete' || a.type === 'undoAdjustment') {
     const c = s.completions.find(x=>x.id===a.id); requireThat(c,'missing');
@@ -145,6 +145,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     if(a.type==='undoAdjustment') {
       const last=c!.adjustments.findLast(x=>!x.undoOf&&!x.undoneBy); requireThat(last,'already');requireThat(last!.to===(c!.reversed?0:c!.xp),'conflict');
       requireThat(parent||last!.actor===actor,'forbidden'); target=last!.from; reason='Deshacer: '+last!.reason; undoOf=last!.id; last!.undoneBy=a.requestId;
+      if(c!.discoveryReset){requireThat(!s.completions.some(item=>item!==c&&item.child===c!.child&&item.taskId===c!.taskId&&!item.discoveryReset),'conflict');delete c!.discoveryReset;}
       if(c!.reversed&&target>0){const task=s.tasks.find(t=>t.id===c!.taskId);requireThat(task&&completed(s,task,c!.child,c!.day)<task.limit,'already');}
     } else {
       requireThat(!c!.reversed,'already');
@@ -213,11 +214,19 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     const open=s.cycles?.at(-1);
     if(open&&!open.closed){const end=nextClose(now,s.cycleRule);Object.assign(open,{...s.cycleRule,id:end,end});}
     log='Día de cierre del ciclo';
-  } else if(a.type === 'bulkResetXp' || a.type === 'undoChildPeriod') {
+  } else if(a.type === 'bulkResetXp' || a.type === 'undoChildPeriod' || a.type === 'resetEggsPeriod') {
     requireParent(); const child=childFor(); const [from,to]=periodBounds(a.scope,a.day,today);
-    const reason=a.type==='bulkResetXp'?'Restablecimiento de Xp del periodo':'Deshacer actividad del periodo';
+    const reason=a.type==='bulkResetXp'?'Restablecimiento de Xp del periodo':a.type==='resetEggsPeriod'?'Restablecimiento de huevos de pascua del periodo':'Deshacer actividad del periodo';
     let affected=0;
+    if(a.type==='resetEggsPeriod')for(const c of s.completions){
+      if(c.child!==child||!c.taskId.startsWith('egg-')||c.discoveryReset||c.day<from||c.day>to)continue;
+      c.originalXP??=1;c.adjustments??=[];
+      c.adjustments.push({id:`${a.requestId}-${c.id}`,at,actor,from:c.xp,to:0,reason});
+      c.xp=0;c.reversed=true;c.reason=reason;c.correctedBy=actor;c.discoveryReset={at,actor,requestId:a.requestId};
+      affected++;
+    }
     for(const c of s.completions){
+      if(a.type==='resetEggsPeriod')continue;
       const selected=c.child===child&&c.xp>0&&(a.type==='bulkResetXp'?c.day>=from&&c.day<=to:c.actor===child&&!c.adjustments?.some(adjustment=>isParent(adjustment.actor,s))&&dateInMadrid(new Date(c.at))>=from&&dateInMadrid(new Date(c.at))<=to);
       if(!selected)continue;
       c.originalXP ??= c.xp;c.adjustments ??=[];
