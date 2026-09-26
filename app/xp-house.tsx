@@ -61,27 +61,39 @@ export function XPHouse({lang='es',onDiscover,custom=false}:{lang?:Lang;onDiscov
         <rect x="304" y="550" width="65" height="74" rx="5" fill="#777d98"/><rect x="309" y="553" width="23" height="15" rx="3" fill="#b8bacc"/><rect x="339" y="553" width="23" height="15" rx="3" fill="#b8bacc"/><path d="M304 578H369"/>
       </g>
       <g className="plan-labels"><text x="235" y="46">{t('TERRAZA','TERRASSA','TERRACE')}</text><text x="248" y="137">{t('SALÓN','SALA','LOUNGE')}</text><text x="312" y="300">{t('COCINA','CUINA','KITCHEN')}</text><text x="70" y="459">{t('BAÑO','BANY','BATH')}</text><text x="330" y="496">{t('BAÑO','BANY','BATH')}</text><text x="175" y="459">{t('PASILLO','PASSADÍS','HALL')}</text><text x="77" y="543" fill="#91dfce">{custom?t('NIÑOS','INFANTS','KIDS'):'AINA'}</text><text x="187" y="543" fill="#d6b3ed">{custom?'':'IARA'}</text><text x="326" y="529">{t('DORMITORIO','DORMITORI','BEDROOM')}</text></g>
-      <Resident name="A" hair="curly" color="#56bfb0" time={time} plan={plans.A} running={running} sleeping={night} task={t('Mesa lista','Taula a punt','Table set')} xp={5}/>
-      <Resident name="I" hair="straight" color="#af87ca" time={time} plan={plans.I} running={running} sleeping={night} task={t('Misión hecha','Missió feta','Mission done')} xp={5}/>
-      <Resident name="X" hair="brown" color="#8aa1bd" time={time} plan={plans.X} running={running} sleeping={night} task={t('En equipo','En equip','Teamwork')} />
-      <Resident name="M" hair="straight" color="#c6aa7a" time={time} plan={plans.M} running={running} sleeping={night} task={t('En equipo','En equip','Teamwork')}/>
+      <Resident name="A" hair="curly" color="#56bfb0" time={time} plan={plans.A} running={running} sleeping={night} task={t('Mesa lista','Taula a punt','Table set')} xp={5} custom={custom}/>
+      <Resident name="I" hair="straight" color="#af87ca" time={time} plan={plans.I} running={running} sleeping={night} task={t('Misión hecha','Missió feta','Mission done')} xp={5} custom={custom}/>
+      <Resident name="X" hair="brown" color="#8aa1bd" time={time} plan={plans.X} running={running} sleeping={night} task={t('En equipo','En equip','Teamwork')} custom={custom}/>
+      <Resident name="M" hair="straight" color="#c6aa7a" time={time} plan={plans.M} running={running} sleeping={night} task={t('En equipo','En equip','Teamwork')} custom={custom}/>
       <Cat time={time} plan={plans.cat} running={running} sleeping={night}/>
     </svg>
   </section>;
 }
 function Bed({x,y,color,horizontal=false}:{x:number;y:number;color:string;horizontal?:boolean}){return horizontal?<g><rect x={x} y={y} width="68" height="33" rx="4" fill={color}/><rect x={x+49} y={y+4} width="14" height="25" rx="4" fill="#cadbd9"/><path d={`M${x+41} ${y}v33`} stroke="#b7cdca"/></g>:<g><rect x={x} y={y} width="33" height="68" rx="4" fill={color}/><rect x={x+4} y={y+5} width="25" height="14" rx="4" fill="#cadbd9"/><path d={`M${x} ${y+27}h33`} stroke="#b7cdca"/></g>}
 function Desk({x,y,color}:{x:number;y:number;color:string}){return <g><rect x={x} y={y} width="32" height="18" rx="2" fill={color}/><rect x={x+7} y={y+3} width="17" height="10" rx="1" fill="#1d303c"/><circle cx={x+16} cy={y-8} r="7" fill={color}/></g>}
-function Resident({name,hair,color,time,plan,running,sleeping,task,xp}:{name:HousePerson;hair:'curly'|'straight'|'brown';color:string;time:number;plan:MotionPlan;running:boolean;sleeping:boolean;task:string;xp?:number}){
+function Resident({name,hair,color,time,plan,running,sleeping,task,xp,custom}:{name:HousePerson;hair:'curly'|'straight'|'brown';color:string;time:number;plan:MotionPlan;running:boolean;sleeping:boolean;task:string;xp?:number;custom:boolean}){
   const {point:[x,y],activity}=samplePerson(name,plan,time);
   const active=running&&time<DAY_END;
   const moment=Math.floor((time+{A:0,I:4,X:8,M:12}[name])/6)%4;
   return <g transform={`translate(${x} ${y})`}>
-    <circle r="18" fill={color} opacity=".24" filter="url(#playerGlow)"/><path d="M-9 2Q0-2 9 2V17H-9Z" fill={color}/><path d="M-9 5L-13 11M9 5L13 11" stroke="#f3c89e" strokeWidth="2" strokeLinecap="round"/><circle cy="-5" r="7" fill="#f3c89e"/><path d={hair==='curly'?'M-8-7q2-5 5 0q2-6 5 0q2-4 5 1':hair==='brown'?'M-8-7Q0-14 8-7V-2H-8Z':'M-8-7Q0-13 8-7V-2H-8Z'} fill={hair==='brown'?'#70472f':'#f4df8a'} stroke={hair==='curly'?'#e8c865':'none'} strokeWidth="1.5"/><circle cx="-2.3" cy="-5" r=".7" fill="#26313a"/><circle cx="2.3" cy="-5" r=".7" fill="#26313a"/><path d="M-2-1Q0 1 2-1" fill="none" stroke="#a45d5c" strokeWidth=".8"/><path d="M-5 17v4M5 17v4" stroke="#dbe5e5" strokeWidth="2.4" strokeLinecap="round"/>
+    <circle r="18" fill={color} opacity=".24" filter="url(#playerGlow)"/><path d="M-9 2Q0-2 9 2V17H-9Z" fill={color}/><path d="M-9 5L-13 11M9 5L13 11" stroke="#f3c89e" strokeWidth="2" strokeLinecap="round"/>{!custom&&<HairBack name={name}/>}<circle cy="-5" r="7" fill="#f3c89e"/>{custom?<path d={hair==='curly'?'M-8-7q2-5 5 0q2-6 5 0q2-4 5 1':hair==='brown'?'M-8-7Q0-14 8-7V-2H-8Z':'M-8-7Q0-13 8-7V-2H-8Z'} fill={hair==='brown'?'#70472f':'#f4df8a'} stroke={hair==='curly'?'#e8c865':'none'} strokeWidth="1.5"/>:<HairFront name={name}/>}<circle cx="-2.3" cy="-5" r=".7" fill="#26313a"/><circle cx="2.3" cy="-5" r=".7" fill="#26313a"/><path d="M-2-1Q0 1 2-1" fill="none" stroke="#a45d5c" strokeWidth=".8"/><path d="M-5 17v4M5 17v4" stroke="#dbe5e5" strokeWidth="2.4" strokeLinecap="round"/>
     {activity==='sofa'&&<text textAnchor="middle" y="-31" className="person-action">📺</text>}
     {active&&!activity&&moment===1&&<text textAnchor="middle" y="-32" className="person-action">{xp?`✓ +${xp} Xp`:`✓ ${task}`}</text>}
     {active&&!activity&&moment===2&&<text textAnchor="middle" y="-42" className="person-chat">bla bla bla...</text>}
     {sleeping&&<text x="8" y="-17" className="cat-zzz">zzZZzz...</text>}
   </g>;
+}
+function HairBack({name}:{name:HousePerson}){
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.2" strokeLinejoin="round"><path d="M-6-10Q-13-9-11-2Q-14 3-11 7Q-13 12-8 15Q-3 14-5 8Q-7 3-6-10ZM6-10Q13-9 11-2Q14 3 11 7Q13 12 8 15Q3 14 5 8Q7 3 6-10Z"/><path d="M-10 2q4-2 4 2t-3 4m15-4q-4-2-4 2t3 4" fill="none" stroke="#fff0a6" strokeWidth="1.4"/></g>;
+  if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-9Q-12-7-10-1Q-12 3-9 7L-6 5V-9ZM6-9Q12-7 10-1Q12 3 9 7L6 5V-9Z"/><path d="M-9-14Q-14-16-13-11Q-12-7-8-9ZM9-14Q14-16 13-11Q12-7 8-9Z"/></g>;
+  if(name==='X')return <path d="M-8-7Q-8-12-4-12Q0-15 4-12Q8-11 8-7L6-2H-6Z" fill="#493027" stroke="#2f201c" strokeWidth="1.3" strokeLinejoin="round"/>;
+  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-6-10Q-12-9-10-3Q-13 1-10 6Q-12 10-7 11Q-3 9-5 4Q-7 0-6-10ZM6-10Q12-9 10-3Q13 1 10 6Q12 10 7 11Q3 9 5 4Q7 0 6-10Z"/><path d="M-9 1q4-2 3 2t-3 3m12-3q-4-2-3 2t3 3" fill="none" stroke="#f6e6ab" strokeWidth="1.3"/></g>;
+}
+function HairFront({name}:{name:HousePerson}){
+  if(name==='A')return <g fill="#f7dc79" stroke="#d5a94e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-3-15 0-12Q3-15 5-12Q9-11 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-5" cy="-11" r="2.1"/><circle cx="1" cy="-12" r="2"/><circle cx="6" cy="-10" r="2"/></g>;
+  if(name==='I')return <g fill="#d5a442" stroke="#9b702c" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><circle cx="-10" cy="-13" r="3.1"/><circle cx="10" cy="-13" r="3.1"/></g>;
+  if(name==='X')return <g fill="#493027" stroke="#2f201c" strokeWidth="1.2" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-15 1-12Q5-14 8-9L8-5Q5-8 2-6Q0-9-3-6Q-6-8-8-5Z"/><path d="M-8-5L-7 1M8-6L7 0"/></g>;
+  return <g fill="#e2c46e" stroke="#b4974e" strokeWidth="1.1" strokeLinejoin="round"><path d="M-8-5Q-9-11-5-12Q-2-14 0-11Q3-14 6-11Q9-9 8-5Q5-8 3-6Q0-9-2-6Q-5-9-8-5Z"/><path d="M-8-5Q-9-1-7 1M8-5Q9-1 7 1" fill="none" stroke="#f6e6ab" strokeWidth="1.6"/></g>;
 }
 function Cat({time,plan,running,sleeping}:{time:number;plan:MotionPlan;running:boolean;sleeping:boolean}){
   const {point:[x,y],idleFor}=sampleCat(plan,time);
