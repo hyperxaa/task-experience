@@ -17,7 +17,7 @@ const animalIds = ['bengal', 'panda', 'fox', 'otter', 'owl', 'frog', 'lion', 'bu
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEVICE_MS = 365 * 24 * 60 * 60 * 1000;
 const DEVICE_ROTATION_GRACE_MS = 60 * 1000;
-const PARENT_MS = 60 * 60 * 1000;
+const PARENT_MS = SESSION_MS;
 const db = () => (globalThis as typeof globalThis & { __taskXpTestDB?: ReturnType<typeof getDatabase> }).__taskXpTestDB ?? getDatabase();
 const hex = (value: Buffer) => value.toString('hex');
 const random = () => hex(randomBytes(32));
@@ -225,14 +225,22 @@ export async function handle(request: Request) {
       session = await readSession(request);
       if (!session) return reply({ error: 'conflict' }, 409);
     }
-    if (request.method === 'GET' && request.headers.get('x-task-xp-activity') === '1' && session?.profile && row && isParent(session.profile, JSON.parse(row.data) as State)) {
+    if (request.method === 'GET' && request.headers.get('x-task-xp-activity') === '1' && session) {
       const now = Date.now();
-      const parentUntil = now + PARENT_MS;
-      // Only a still-unlocked adult can extend access. The max expression keeps
-      // concurrent tabs from moving the deadline backwards.
-      await db().prepare('UPDATE sessions SET parent_until = MAX(parent_until, ?) WHERE token = ? AND profile = ? AND parent_until > ?').bind(parentUntil, session.token, session.profile, now).run();
+      const adult = session.profile && row && isParent(session.profile, JSON.parse(row.data) as State);
+      const expires = now + SESSION_MS;
+      if (adult) {
+        const parentUntil = now + PARENT_MS;
+        // Activity renews the whole session for every profile and the parent
+        // unlock for adults. MAX prevents concurrent tabs moving deadlines back.
+        await db().prepare('UPDATE sessions SET expires = MAX(expires, ?), parent_until = MAX(parent_until, ?) WHERE token = ? AND expires > ?').bind(expires, parentUntil, session.token, now).run();
+      } else {
+        await db().prepare('UPDATE sessions SET expires = MAX(expires, ?) WHERE token = ? AND expires > ?').bind(expires, session.token, now).run();
+      }
       session = await readSession(request);
       if (!session) return reply({ error: 'conflict' }, 409);
+      const rawSession = requestCookies(request).session;
+      if (rawSession && !responseCookies.some(value => value.startsWith('txp_session='))) responseCookies.push(cookie(request, 'txp_session', rawSession, Math.floor((session.expires - Date.now()) / 1000)));
     }
     if (row && session?.profile) {
       for (let retry = 0; retry < 5; retry++) {
