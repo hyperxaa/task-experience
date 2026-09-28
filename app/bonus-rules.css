@@ -6,3 +6,12 @@
 /* The bonus source keeps its gold identity for both silver and super awards. */
 .bonus-celebration.is-silver .bonus-stage{border-color:#f2c96f66;background:radial-gradient(circle at 50% 23%,#d8ae5733,transparent 40%),linear-gradient(155deg,#302a37,#151b29)}
 .bonus-celebration .bonus-kicker,.bonus-celebration .bonus-total{color:#f2c96f}
+.bonus-celebration.is-silver .bonus-stage{border-color:#d2dbe588;background:radial-gradient(circle at 50% 23%,#dce7f433,transparent 40%),linear-gradient(155deg,#2b3544,#151b29)}
+.bonus-celebration.is-silver .bonus-kicker,.bonus-celebration.is-silver .bonus-total{color:#dce5ef}
+.bonus-celebration.is-silver .bonus-trophy{filter:drop-shadow(0 12px 22px #c7d6e888)}
+.bonus-celebration.is-silver .bonus-prize{border-color:#c2d0df80;background:#c8d6e21c}
+.bonus-celebration.is-silver .bonus-prize>svg{color:#dce5ef}
+.bonus-celebration.is-silver .bonus-redeem{background:#c8d3df;color:#18202b}
+.rules-card.silver>svg{color:#d2dbe5!important}
+.rules-card.silver{border-color:#d2dbe566;background:linear-gradient(145deg,#35404d,#222a37)}
+.rules-card.gold>svg{color:#f2c96f!important}
