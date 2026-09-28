@@ -13,7 +13,7 @@ export function BonusCelebration({ bonuses, lang, reward, balance, onClose, onRe
   const superBonus = bonuses.find(b => b.kind === 'super');
   const xp = bonuses.reduce((sum, b) => sum + b.xp, 0);
   const ready = reward && balance >= reward.xp;
-  return <div className={`bonus-celebration ${superBonus ? 'is-super' : 'is-silver'}`} role="dialog" aria-modal="true" aria-label={t('Celebración de bonus', 'Celebració de bonus', 'Bonus celebration')}>
+  return <div className={`bonus-celebration xp-bonus ${superBonus ? 'is-super' : 'is-silver'}`} role="dialog" aria-modal="true" aria-label={t('Celebración de bonus', 'Celebració de bonus', 'Bonus celebration')}>
     <div className="bonus-backdrop" onClick={onClose}/>
     <div className="bonus-confetti" aria-hidden="true">{Array.from({length:48},(_,i)=><i key={i} style={{'--i':i,'--delay':`${(i%9)*0.07}s`,'--angle':`${(i*137.5)%360}deg`} as React.CSSProperties}/>)}</div>
     <section className="bonus-stage">

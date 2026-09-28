@@ -9,6 +9,30 @@
 @media(max-width:760px){.entry-art{padding:12px 20px;gap:0}.entry-art .brand-logo{width:125px;height:125px}.entry-story{display:grid!important;width:100%}.entry-story>.eyebrow{display:none}.entry-story h1{font-size:1.55rem;margin:5px 0 8px}.rotating-copy{min-height:128px!important}.rotating-copy>p{font-size:.76rem;max-width:320px}.entry-story .home-arcade{display:block;width:min(100%,270px);margin:12px auto 4px}.entry-footer{display:none}.entry-panel{padding:12px 24px 28px}.entry-language{margin:0}.entry-form{padding:10px 0}.entry-form h2{font-size:1.55rem}.entry{grid-template-rows:auto 1fr}.entry-art .brand{display:flex!important}.history-stats{grid-template-columns:1fr 1fr}.history-stats .stat:nth-child(3){grid-column:1/-1}.history-stats .stat strong{font-size:1.7rem}.period-toggle button{padding:7px 12px}.record-actions{width:100%;justify-content:flex-end}.history-record .record-row{flex-wrap:wrap}.history-record .record-row>div:nth-child(2){flex:1;min-width:130px}.history-record details{padding-left:0}.progress-history .panel{padding:20px 16px}.period-context{flex-wrap:wrap}.period-nav strong{font-size:.8rem}.closing-score{flex-wrap:wrap;gap:10px}.sidebar .nav-item[data-state=active]{box-shadow:inset 0 -3px var(--user)}.sidebar .nav-item span{font-size:.62rem;line-height:1.2}.sidebar .side-nav>.nav-item{overflow:hidden!important}}
 @media(prefers-reduced-motion:reduce){.task-row:hover{transform:none}.bar-well i{transition:none}}
 
+/* XP source colours stay the same across profiles and screens. */
+.app{--xp-mission:#63d6bf;--xp-mission-wash:#163b39;--xp-discovery:#cf9cf2;--xp-discovery-wash:#3b284c;--xp-bonus:#f2c96f;--xp-bonus-wash:#46391e;--xp-adjustment:#e99a9a;--xp-adjustment-wash:#482b35}
+.xp-mission{--xp-source-color:var(--xp-mission);--xp-source-wash:var(--xp-mission-wash)}
+.xp-discovery{--xp-source-color:var(--xp-discovery);--xp-source-wash:var(--xp-discovery-wash)}
+.xp-bonus{--xp-source-color:var(--xp-bonus);--xp-source-wash:var(--xp-bonus-wash)}
+.xp-adjustment{--xp-source-color:var(--xp-adjustment);--xp-source-wash:var(--xp-adjustment-wash)}
+.xp-chip.xp-source-chip{color:var(--xp-source-color);background:var(--xp-source-wash);border-color:color-mix(in srgb,var(--xp-source-color) 38%,transparent)}
+.record-icon.xp-mission,.record-icon.xp-discovery,.record-icon.xp-bonus{color:var(--xp-source-color);background:var(--xp-source-wash);border:1px solid color-mix(in srgb,var(--xp-source-color) 34%,transparent)}
+.xp-source-legend .xp-source-key{display:inline-flex;align-items:center;gap:6px;color:var(--xp-source-color)}
+.xp-source-legend .xp-source-key:before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--xp-source-color)}
+.xp-source-legend .xp-adjustment:before{background:repeating-linear-gradient(135deg,var(--xp-adjustment) 0 3px,#482b35 3px 6px)}
+.bar-well .bar-segment{display:block;width:100%;min-height:0;flex-shrink:0}
+.bar-well .xp-mission{background:linear-gradient(#83e5d0,var(--xp-mission))}
+.bar-well .xp-discovery{background:linear-gradient(#dfb8fa,var(--xp-discovery))}
+.bar-well .xp-bonus{background:linear-gradient(#ffe09a,var(--xp-bonus))}
+.bar-well .xp-adjustment{background:repeating-linear-gradient(135deg,var(--xp-adjustment) 0 4px,#7c4b56 4px 8px)}
+.history-record.xp-mission{border-left:3px solid var(--xp-mission)}
+.history-record.xp-discovery{border-left:3px solid var(--xp-discovery)}
+.bonus-record.xp-bonus{border-color:#f2c96f66;background:#f2c96f12}
+.bonus-record.xp-bonus .xp-chip{color:var(--xp-bonus)}
+.family-breakdown .xp-mission,.family-breakdown .xp-discovery,.family-breakdown .xp-bonus{color:var(--xp-source-color)}
+.task-row .xp-chip.xp-mission,.proposal-copy .xp-chip.xp-mission{color:var(--xp-mission);background:var(--xp-mission-wash);border-color:#63d6bf55}
+.weekly-note>svg,.bonus-legend .silver-mark,.bonus-legend .super-mark{color:var(--xp-bonus)}
+
 /* Login arcade: the house and the mark are the heroes on a desktop. */
 .sidebar .brand{justify-content:center;padding:10px 0 16px}.sidebar .brand-logo{width:126px;height:126px}.entry-art .brand-logo{width:250px;height:250px}.copy-progress{margin-top:13px;padding:5px 9px;border:1px solid #6e9d9957;border-radius:99px;color:#9eb9bd;font-size:.65rem;letter-spacing:.08em}.home-arcade{width:min(100%,465px)}.home-arcade>header{padding:11px 17px}.home-arcade>header>span{font-size:.78rem}.home-arcade button{width:34px;height:34px}.cat-zzz{fill:#d7c4e6;font-size:10px;font-weight:800;letter-spacing:1px}
 @media(min-width:1200px){.entry-story{grid-template-columns:minmax(180px,.9fr) minmax(270px,1.1fr);gap:0 28px;align-items:center}.entry-story>.eyebrow{grid-column:1/-1}.entry-art{justify-content:center}.entry-art .brand-logo{width:320px;height:320px}.rotating-copy{min-height:0!important;text-align:left}.entry-story h1{font-size:clamp(2rem,2.9vw,3.4rem)}.entry-story .home-arcade{width:100%;max-width:470px}.entry-footer{margin-top:15px}}
@@ -49,3 +73,19 @@ html[lang="en"] .xp-dialog label:not(.check-label):not(:has(small)):has(>input[t
 @media(max-width:760px){.sidebar .side-nav{overflow-x:hidden!important}.sidebar .side-nav>.nav-item{flex:1 1 0!important;min-width:0!important;padding:7px 1px!important}.sidebar .side-nav>.nav-item>span{white-space:normal!important;overflow-wrap:anywhere;text-align:center;font-size:.57rem!important;line-height:1.1!important}}
 
 @media(max-width:760px){.sidebar{height:84px}.workspace{padding-bottom:90px}.sidebar .side-nav>.nav-item{min-height:82px!important;height:100%!important}}
+
+/* Semantic XP source colours are fixed across profile themes and views. */
+.xp-chip.xp-source-chip{color:var(--xp-source-color)!important;background:var(--xp-source-wash)!important;border-color:color-mix(in srgb,var(--xp-source-color) 38%,transparent)!important}
+.bonus-record.xp-bonus .xp-chip{color:var(--xp-bonus)!important}
+.bonus-legend .silver-mark,.bonus-legend .super-mark{background:linear-gradient(135deg,#ffe9a8,#dba943)}
+.activity-map button.bonus-silver,.day-navigator-option.bonus-silver{border-color:#f2c96f;box-shadow:inset 0 0 0 2px #d6a64e,0 0 10px #e6bc6c66}
+.activity-map button.bonus-silver:after,.day-navigator-option.bonus-silver:after{color:#ffe2a2}
+.achievement-panel .achievement-track article.unlocked{background:linear-gradient(145deg,#3b284c,#242c3c);border-color:#cf9cf255}
+.achievement-panel .achievement-track article.unlocked>span{color:#dfb8fa}
+.achievement-panel .achievement-track article .achievement-xp{color:#cf9cf2}
+.achievement-panel .achievement-track article.unlocked small{color:#d5b2ed}
+.family-week-outlook>div:nth-of-type(2)>strong,.family-week-outlook>div:nth-of-type(3)>strong,.family-week-outlook>small{color:var(--xp-bonus)}
+.rules-task-grid b.xp-mission{color:var(--xp-mission)}
+.secret-progress h2>svg{color:var(--xp-discovery)}
+.rules-card.silver>svg,.rules-card.gold>svg{color:var(--xp-bonus)}
+.rules-card.silver{border-color:#f2c96f66;background:linear-gradient(145deg,#443a28,#222a37)}

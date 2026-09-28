@@ -8,4 +8,8 @@
 .discovery-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; padding:12px 0 0; list-style:none; }
 .discovery-list li { display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid #39455b; border-radius:10px; }
 .discovery-list svg { flex:none; color:#8be2d5; }
+.discovery-dialog .discovery-icon,.discovery-dialog.theme-iara .discovery-icon { color:#dfb8fa; background:linear-gradient(145deg,#704294,#3d3155); box-shadow:0 0 0 8px #d1a5ff18,0 16px 35px #0005; }
+.discovery-dialog>strong,.discovery-dialog.theme-iara>strong { color:#dfb8fa; }
+.discovery-list li.xp-discovery { color:#dfb8fa; border-color:#cf9cf255; background:#3b284c66; }
+.discovery-list li.xp-discovery svg { color:#dfb8fa; }
 .theme-iara .discovery-list svg { color:#e1bcff; }

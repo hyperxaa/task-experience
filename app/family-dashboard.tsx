@@ -107,9 +107,9 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
         <div className="family-stat-title"><i className="family-color-dot"/><h3>{memberName(state, item.child)}</h3></div>
         <div className="family-stat-numbers"><div><small>{t('Ganados en este periodo', 'Guanyats en aquest període', 'Earned in this period')}</small><strong>{number(item.actual.earned)} <i>Xp</i></strong></div><span className="family-delta">{item.delta > 0 ? '+' : ''}{number(item.delta)} Xp<small>{t('respecto al anterior', 'respecte a l’anterior', 'vs previous')}</small></span></div>
         <dl className="family-breakdown">
-          <div><dt>{t('Misiones', 'Missions', 'Missions')}</dt><dd>{number(item.actual.mission)} Xp</dd></div>
-          <div><dt>Bonus</dt><dd>{number(item.actual.bonus)} Xp</dd></div>
-          <div><dt>{t('Descubrimientos', 'Descobriments', 'Discoveries')}</dt><dd>{number(item.actual.discovery)} Xp</dd></div>
+          <div><dt>{t('Misiones', 'Missions', 'Missions')}</dt><dd className="xp-mission">{number(item.actual.mission)} Xp</dd></div>
+          <div><dt>Bonus</dt><dd className="xp-bonus">{number(item.actual.bonus)} Xp</dd></div>
+          <div><dt>{t('Descubrimientos', 'Descobriments', 'Discoveries')}</dt><dd className="xp-discovery">{number(item.actual.discovery)} Xp</dd></div>
           <div><dt>{t('Canjeados / reservados', 'Bescanviats / reservats', 'Spent / reserved')}</dt><dd>{number(item.actual.spent)} Xp</dd></div>
         </dl>
         <div className="family-stat-foot"><span>{item.actual.completions} {t('misiones hechas', 'missions fetes', 'mission completions')} · {item.actual.activeDays} {t('días con actividad', 'dies amb activitat', 'active days')}</span><span>{t('Saldo disponible ahora', 'Saldo disponible ara', 'Available balance now')}<b>{number(totals(state, item.child).balance)} Xp</b></span></div>
