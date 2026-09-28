@@ -199,3 +199,69 @@
     max-width: none;
   }
 }
+
+/* Give portrait tablets a compact header with the XP balance, centered logo, and account controls. */
+@media (min-width: 761px) and (max-width: 1180px) and (orientation: portrait) {
+  .sidebar > .brand {
+    display: none;
+  }
+
+  .topbar {
+    position: relative;
+  }
+
+  .topbar .breadcrumb {
+    display: none;
+  }
+
+  .topbar .mobile-brand {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+
+  .mobile-brand .brand {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+
+  .mobile-brand .brand-logo {
+    position: absolute;
+    top: 50%;
+    left: calc(50% - 87.5px);
+    width: 58px;
+    height: 58px;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+  }
+
+  .mobile-brand .brand-wordmark {
+    display: none;
+  }
+
+  .mobile-brand .brand-xp-meter {
+    position: absolute;
+    top: 50%;
+    left: 27px;
+    margin: 0;
+    padding: 7px 10px;
+    font-size: .8rem;
+    transform: translateY(-50%);
+  }
+
+  .topbar .top-actions {
+    position: relative;
+    z-index: 1;
+    margin-left: auto;
+    gap: 8px;
+  }
+}
+
+@media (min-width: 961px) and (max-width: 1180px) and (orientation: portrait) {
+  .mobile-brand .brand-logo {
+    left: calc(50% - 100px);
+  }
+}
