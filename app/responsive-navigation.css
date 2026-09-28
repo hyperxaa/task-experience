@@ -200,6 +200,26 @@
   }
 }
 
+/* Keep the header compact and space the desktop sidebar branding deliberately. */
+.topbar {
+  height: 78px;
+}
+
+@media (min-width: 761px) and (orientation: landscape) {
+  .sidebar {
+    padding-top: 18px;
+  }
+
+  .sidebar > .brand {
+    padding-top: 4px;
+  }
+
+  .sidebar > .brand .brand-xp-meter {
+    justify-self: center;
+    margin-top: 16px !important;
+  }
+}
+
 /* Give portrait tablets a compact header with the XP balance, centered logo, and account controls. */
 @media (min-width: 481px) and (max-width: 1180px) and (orientation: portrait) {
   .sidebar > .brand {
@@ -208,7 +228,6 @@
 
   .topbar {
     position: relative;
-    height: 86px;
   }
 
   .topbar .breadcrumb {
@@ -216,6 +235,7 @@
   }
 
   .topbar .mobile-brand {
+    --portrait-brand-offset: 0px;
     position: absolute;
     inset: 0;
     display: block;
@@ -232,7 +252,7 @@
   .mobile-brand .brand-logo {
     position: absolute;
     top: 50%;
-    left: 50%;
+    left: calc(50% + var(--portrait-brand-offset));
     width: 58px;
     height: 58px;
     transform: translate(-50%, -50%);
@@ -240,7 +260,14 @@
   }
 
   .mobile-brand .brand-wordmark {
-    display: none;
+    position: absolute;
+    top: 50%;
+    left: calc(50% + var(--portrait-brand-offset) + 36px);
+    display: block;
+    font-size: clamp(.65rem, 1.5vw, .8rem);
+    white-space: nowrap;
+    transform: translateY(-50%);
+    pointer-events: auto;
   }
 
   .mobile-brand .brand-xp-meter {
@@ -262,13 +289,13 @@
 }
 
 @media (min-width: 761px) and (max-width: 960px) and (orientation: portrait) {
-  .mobile-brand .brand-logo {
-    left: calc(50% - 87.5px);
+  .topbar .mobile-brand {
+    --portrait-brand-offset: -87.5px;
   }
 }
 
 @media (min-width: 961px) and (max-width: 1180px) and (orientation: portrait) {
-  .mobile-brand .brand-logo {
-    left: calc(50% - 100px);
+  .topbar .mobile-brand {
+    --portrait-brand-offset: -100px;
   }
 }
