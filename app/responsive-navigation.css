@@ -117,11 +117,14 @@
 @media (min-width: 761px) and (orientation: landscape) {
   .sidebar > .brand {
     width: 100%;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    align-items: center;
   }
 
   .sidebar > .brand .brand-logo {
-    align-self: flex-start;
+    justify-self: center;
     width: min(100%, 32dvh);
     height: auto;
     max-width: 100%;
@@ -129,10 +132,13 @@
     object-fit: contain;
   }
 
-  .sidebar > .brand .brand-wordmark,
+  .sidebar > .brand .brand-wordmark {
+    justify-self: center;
+  }
+
   .sidebar > .brand .brand-xp-meter {
-    align-self: center;
-    margin-inline: auto;
+    justify-self: start;
+    margin: 8px 0 0 !important;
   }
 }
 
