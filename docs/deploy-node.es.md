@@ -192,9 +192,10 @@ El setup token puede retirarse de `.env.local` y reiniciar el servicio después 
 ## Sesiones y credenciales
 
 - Contraseña familiar y códigos se verifican con Argon2id. Tras el primer login familiar correcto se borra la copia cifrada y solo permanecen los hashes. La contraseña PBKDF2 de instalaciones previas se actualiza a Argon2id al iniciar sesión correctamente.
-- Cookie de sesión `HttpOnly`, `SameSite=Strict`, `Secure` cuando `PUBLIC_ORIGIN` usa HTTPS; caduca a las 12 horas. Los tokens son aleatorios y SQLite solo contiene su SHA-256.
+- Cookie de sesión `HttpOnly`, `SameSite=Strict`, `Secure` cuando `PUBLIC_ORIGIN` usa HTTPS; caduca tras siete días. Los tokens son aleatorios y SQLite solo contiene su SHA-256.
 - «Recordar este dispositivo» crea otra cookie opaca, con vida máxima de un año. Se almacena el hash, se rota al recuperar una sesión caducada y se revoca al cerrar sesión. Cambiar la contraseña o códigos revoca los demás dispositivos.
-- Los perfiles parentales se bloquean tras 15 minutos; cada perfil se vuelve a seleccionar con su código.
+- Los perfiles parentales se bloquean tras 15 minutos; se vuelve a pedir el código de animales, conservando el acceso familiar del dispositivo. La contraseña familiar no se solicita por este bloqueo.
+- La renovación del dispositivo recordado admite peticiones simultáneas durante 60 segundos, con el mismo reemplazo y sin alargar su caducidad de un año. Una respuesta antigua no borra la cookie nueva. «Olvidar este dispositivo» revoca sus sesiones.
 - La API valida `Origin` contra `PUBLIC_ORIGIN`, limita el tamaño del JSON y bloquea temporalmente los intentos **fallidos** por IP cuando `TASK_XP_TRUST_PROXY=true` y nginx sobrescribe `X-Real-IP`. Los accesos correctos no consumen el límite.
 - La primera instalación no incluye ninguna contraseña predeterminada, endpoint de login de ChatGPT ni mock de autenticación.
 

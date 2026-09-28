@@ -103,3 +103,13 @@ test('backup import rejects forged Xp and unknown missions',()=>{
   state.completions[0].taskId='bed';state.completions[0].xp=1_000_000;
   assert.throws(()=>parseExportedState({exportedAt:at('2026-09-21').toISOString(),data:state}),/invalidBackup/);
 });
+
+test('backups created before mission excusals remain importable',()=>{
+  const state=structuredClone(small());
+  delete state.missionExcusals;
+  for(const task of state.tasks) delete task.allowExcusal;
+  for(const plan of state.weeklyPlans??[]) for(const task of plan.tasks) delete task.allowExcusal;
+  const imported=parseExportedState({exportedAt:at('2026-09-21').toISOString(),data:state});
+  assert.equal(imported.missionExcusals,undefined);
+  assert.equal(imported.tasks.some(task=>task.allowExcusal===true),false);
+});

@@ -14,8 +14,9 @@ type Session = { token: string; profile: Person | null; expires: number; parent_
 type Hash = { salt: string; hash: string; algorithm?: 'argon2id' | 'pbkdf2' };
 type Credentials = { password: Hash; codes?: Record<Person, Hash>; pins?: Record<Person, Hash>; pendingCodes?: Record<Person, string[]>; pendingCodesEncrypted?: string };
 const animalIds = ['bengal', 'panda', 'fox', 'otter', 'owl', 'frog', 'lion', 'bunny', 'koala', 'dog', 'penguin', 'flamingo'];
-const SESSION_MS = 12 * 60 * 60 * 1000;
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEVICE_MS = 365 * 24 * 60 * 60 * 1000;
+const DEVICE_ROTATION_GRACE_MS = 60 * 1000;
 const PARENT_MS = 15 * 60 * 1000;
 const db = () => (globalThis as typeof globalThis & { __taskXpTestDB?: ReturnType<typeof getDatabase> }).__taskXpTestDB ?? getDatabase();
 const hex = (value: Buffer) => value.toString('hex');
@@ -133,22 +134,31 @@ async function newSession(request: Request, profile: Person | null, old?: Sessio
 }
 async function restoreDevice(request: Request) {
   const raw = requestCookies(request).device;
-  if (!raw) return { session: null as Session | null, cookies: [] as string[] };
+  const empty = { session: null as Session | null, cookies: [] as string[], retry: false };
+  if (!raw) return empty;
   const oldToken = digest(raw);
-  const device = await db().prepare('SELECT token, expires FROM remember_devices WHERE token = ? AND expires > ?').bind(oldToken, Date.now()).first<{ token: string; expires: number }>();
-  if (!device) return { session: null, cookies: [cookie(request, 'txp_remember', '', 0)] };
-  const rotatedValue = random();
+  // Concurrent tabs derive the same replacement. Storage still contains only hashes.
+  const rotatedValue = pepper('remember-rotation:' + raw);
   const rotatedToken = digest(rotatedValue);
   const now = Date.now();
-  const sessionValue = random();
+  const sessionValue = pepper('remember-session:' + raw);
   const expires = now + SESSION_MS;
-  const rotate = db().prepare('UPDATE remember_devices SET token = ? WHERE token = ? AND expires > ?').bind(rotatedToken, oldToken, now);
-  const insertSession = db().prepare('INSERT INTO sessions (token, profile, expires, parent_until, remember_token) SELECT ?, NULL, ?, 0, ? WHERE EXISTS (SELECT 1 FROM remember_devices WHERE token = ?)').bind(digest(sessionValue), expires, rotatedToken, rotatedToken);
-  const removeExpired = db().prepare('DELETE FROM sessions WHERE expires < ?').bind(now);
-  const result = await db().batch([rotate, insertSession, removeExpired]);
-  if (!result[0]?.meta?.changes || !result[1]?.meta?.changes) return { session: null, cookies: [cookie(request, 'txp_remember', '', 0)] };
-  const session: Session = { token: digest(sessionValue), profile: null, expires, parent_until: 0, remember_token: rotatedToken };
-  return { session, cookies: [cookie(request, 'txp_session', sessionValue, Math.floor(SESSION_MS / 1000)), cookie(request, 'txp_remember', rotatedValue, Math.max(0, Math.floor((device.expires - now) / 1000)))] };
+  const device = await db().prepare('SELECT token FROM remember_devices WHERE token = ? AND expires > ?').bind(oldToken, now).first<{ token: string }>();
+  if (device) {
+    await db().batch([
+      // `created` records the last rotation; `expires` retains the original one-year deadline.
+      db().prepare('UPDATE remember_devices SET token = ?, created = ? WHERE token = ? AND expires > ?').bind(rotatedToken, now, oldToken, now),
+      db().prepare('INSERT OR IGNORE INTO sessions (token, profile, expires, parent_until, remember_token) SELECT ?, NULL, ?, 0, ? WHERE EXISTS (SELECT 1 FROM remember_devices WHERE token = ? AND expires > ? AND created >= ?)').bind(digest(sessionValue), expires, rotatedToken, rotatedToken, now, now - DEVICE_ROTATION_GRACE_MS),
+      db().prepare('UPDATE sessions SET remember_token = ? WHERE remember_token = ?').bind(rotatedToken, oldToken),
+      db().prepare('DELETE FROM sessions WHERE expires < ?').bind(now),
+    ]);
+  }
+  // Accept the predecessor only briefly, and only while the replacement is still valid.
+  const replacement = await db().prepare('SELECT expires FROM remember_devices WHERE token = ? AND expires > ? AND created >= ?').bind(rotatedToken, now, now - DEVICE_ROTATION_GRACE_MS).first<{ expires: number }>();
+  if (!replacement) return empty; // A stale response must never erase another tab's new cookie.
+  const session = await db().prepare('SELECT * FROM sessions WHERE token = ? AND expires > ? AND remember_token = ?').bind(digest(sessionValue), now, rotatedToken).first<Session>();
+  if (!session) return { ...empty, retry: true }; // Another tab has already unlocked or signed out.
+  return { session, retry: false, cookies: [cookie(request, 'txp_session', sessionValue, Math.max(0, Math.floor((session.expires - now) / 1000))), cookie(request, 'txp_remember', rotatedValue, Math.max(0, Math.floor((replacement.expires - now) / 1000)))] };
 }
 async function checkLimit(key: string) {
   const row = await db().prepare('SELECT count, until FROM attempts WHERE key = ?').bind(key).first<{ count: number; until: number }>();
@@ -204,12 +214,16 @@ export async function handle(request: Request) {
     let session = await readSession(request);
     if (!session) {
       const restored = await restoreDevice(request);
+      if (restored.retry) return reply({ error: 'conflict' }, 409);
       session = restored.session;
       responseCookies.push(...restored.cookies);
     }
     if (session?.profile && row && isParent(session.profile, JSON.parse(row.data) as State) && session.parent_until > 0 && session.parent_until <= Date.now()) {
-      responseCookies.push(...await newSession(request, null, session));
-      session = null;
+      // Lock the adult profile, not the family device. Do not rotate cookies on a
+      // background GET: simultaneous tabs must not invalidate each other's sessions.
+      await db().prepare('UPDATE sessions SET profile = NULL, parent_until = 0 WHERE token = ? AND parent_until > 0 AND parent_until <= ?').bind(session.token, Date.now()).run();
+      session = await readSession(request);
+      if (!session) return reply({ error: 'conflict' }, 409);
     }
     if (row && session?.profile) {
       for (let retry = 0; retry < 5; retry++) {
@@ -264,7 +278,7 @@ export async function handle(request: Request) {
     if (!session) return reply({ error: 'session' }, 401);
     if (op === 'logout') {
       await db().batch([
-        db().prepare('DELETE FROM sessions WHERE token = ?').bind(session.token),
+        db().prepare('DELETE FROM sessions WHERE token = ? OR remember_token = ?').bind(session.token, session.remember_token),
         ...(session.remember_token ? [db().prepare('DELETE FROM remember_devices WHERE token = ?').bind(session.remember_token)] : []),
       ]);
       return reply({ ok: true }, 200, [cookie(request, 'txp_session', '', 0), cookie(request, 'txp_remember', '', 0)]);

@@ -4,21 +4,27 @@ import { childrenOf } from './family.ts';
 
 export type WeeklyPlan = { week: string; startsOn?: string; tasks: Task[]; taskStartsOn?: Record<string, string>; noTaskBonus?: string[] };
 export type WeeklyBonus = { id: string; week: string; child: Child; kind: 'task' | 'super'; taskId?: string; title: string | Words; baseXp: number; xp: number; at: string };
+export type MissionExcusal = { id: string; taskId: string; child: Child; scope: 'day' | 'week'; from: string; to: string; actor: string; at: string; reason?: string; revokedAt?: string; revokedBy?: string };
 
 const dayOfWeek = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
 export function bonusWeek(day: string) { return addDays(day, -((dayOfWeek(day) + 6) % 7)); }
 
-function paused(state: State, child: Child, day: string) {
+export function paused(state: State, child: Child, day: string) {
   return state.pauses.some(p => p.child === child && day >= p.from && day <= p.to && (!p.cancelledAt || day < madridDay(new Date(p.cancelledAt))));
+}
+
+export function excusalForDay(state: State, taskId: string, child: Child, day: string) {
+  return state.missionExcusals?.find(item => !item.revokedAt && item.taskId === taskId && item.child === child && day >= item.from && day <= item.to);
 }
 
 function taskResult(state: State, task: Task, child: Child, week: string, startsOn = week) {
   const plan = state.weeklyPlans?.find(item => item.week === week);
   const taskStart = plan?.taskStartsOn?.[task.id];
+  if (task.cadence === 'weekly' && excusalForDay(state, task.id, child, week)) return { expected: 0, complete: false, baseXp: 0 };
   const dates = Array.from({ length: 7 }, (_, index) => addDays(week, index))
-    .filter(day => day >= startsOn && (!taskStart || day >= taskStart) && task.days.includes(dayOfWeek(day)) && !paused(state, child, day));
+    .filter(day => day >= startsOn && (!taskStart || day >= taskStart) && task.days.includes(dayOfWeek(day)) && !paused(state, child, day) && !excusalForDay(state, task.id, child, day));
   if (!dates.length) return { expected: 0, complete: false, baseXp: 0 };
-  const rows = state.completions.filter(c => c.child === child && c.taskId === task.id && !c.reversed && c.xp > 0 && dates.includes(c.day));
+  const rows = state.completions.filter(c => c.child === child && c.taskId === task.id && !c.reversed && c.xp > 0 && c.day >= week && c.day < addDays(week,7));
   const expected = task.cadence === 'weekly' ? task.limit : dates.length * task.limit;
   const complete = task.cadence === 'weekly'
     ? rows.length >= task.limit
@@ -82,6 +88,7 @@ export function settleWeeklyBonuses(state: State, now = new Date()) {
       if (!results.length) continue;
       if (results.every(result => result.complete)) {
         const baseXp = results.reduce((sum, result) => sum + result.baseXp, 0);
+        if (baseXp <= 0) continue;
         const id = `super-${plan.week}-${child}`;
         awards.push({ id, week: plan.week, child, kind: 'super', title: { es: 'Superbonus semanal', ca: 'Superbonus setmanal', en: 'Weekly super bonus' }, baseXp, xp: baseXp * 4, at: state.weeklyBonuses.find(b => b.id === id)?.at ?? (closed ? closedAt : now.toISOString()) });
       } else {

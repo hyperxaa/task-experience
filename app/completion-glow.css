@@ -1,0 +1,10 @@
+.brand-completing .brand-logo{animation:mission-logo-glow 1.8s ease-out both;}
+.brand-completing .brand-xp-meter{animation:mission-counter-glow 1.8s ease-out both;}
+.brand-returning-xp .brand-xp-meter{animation:mission-counter-return 1.8s ease-out both;}
+.celebration{width:0;}
+.celebration .xp-pop{width:max-content;}
+@keyframes mission-logo-glow{0%{filter:drop-shadow(0 0 0 transparent)}24%{filter:drop-shadow(0 0 8px #fff) drop-shadow(0 0 25px #75e5db) drop-shadow(0 0 42px #b58be8)}58%{filter:drop-shadow(0 0 9px #fff) drop-shadow(0 0 24px #67d6ca)}100%{filter:drop-shadow(0 0 0 transparent)}}
+@keyframes mission-counter-glow{0%,100%{transform:scale(1);box-shadow:0 5px 16px #0004}24%{transform:scale(1.14);box-shadow:0 0 0 5px #75e5db35,0 0 30px #75e5dbbb,0 0 44px #b58be880}58%{transform:scale(1.08);box-shadow:0 0 0 3px #75e5db28,0 0 24px #67d6cab3}}
+@keyframes mission-counter-return{0%,100%{transform:scale(1);box-shadow:0 5px 16px #0004}24%{transform:scale(1.14);box-shadow:0 0 0 5px #ff666635,0 0 30px #ff4f63bb,0 0 44px #e52f50aa}58%{transform:scale(1.08);box-shadow:0 0 0 3px #ff667128,0 0 24px #ed425eb3}}
+@media(prefers-reduced-motion:reduce){.brand-completing .brand-logo{animation:none;filter:drop-shadow(0 0 12px #8ee7db)}.brand-completing .brand-xp-meter{animation:none;box-shadow:0 0 0 3px #75e5db50,0 0 24px #67d6ca}.brand-returning-xp .brand-xp-meter{animation:none;box-shadow:0 0 0 3px #ff667150,0 0 24px #ed425e}}
+.task-excused{border-style:dashed!important;opacity:.82}.excusal-label{display:block;margin-top:5px;color:#e4c583!important;font-size:.68rem}.excusal-pill{padding:6px 9px;border:1px solid #a9853d66;border-radius:9px;color:#e4c583;font-size:.7rem}

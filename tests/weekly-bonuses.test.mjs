@@ -51,6 +51,33 @@ test('a completed task receives x2 and an incomplete task receives no bonus', ()
   assert.equal(totals(state, 'aina').xp, 17);
 });
 
+test('an excused repetition stops blocking x2 without erasing XP already earned that day', () => {
+  let state = smallPlan();
+  state.tasks = state.tasks.map(task => ({ ...task, allowExcusal: true }));
+  state = complete(state, 'teeth', '2026-09-21');
+  state = complete(state, 'teeth', '2026-09-21');
+  state = complete(state, 'teeth', '2026-09-22');
+  state = applyAction(state, 'xavi', { type:'excuseMission', requestId:`weekly-${++nextId}`, taskId:'teeth', child:'aina', day:'2026-09-22' }, new Date('2026-09-23T12:00:00Z'));
+  assert.equal(due(state.tasks.find(task=>task.id==='teeth'),'aina','2026-09-22',state),false);
+  assert.deepEqual(state.weeklyBonuses.map(bonus=>[bonus.kind,bonus.taskId,bonus.baseXp,bonus.xp]),[['task','teeth',9,9]]);
+  assert.throws(()=>applyAction(state,'aina',{type:'unexcuseMission',requestId:`weekly-${++nextId}`,id:state.missionExcusals[0].id},new Date('2026-09-23T12:01:00Z')),/forbidden/);
+  state=applyAction(state,'xavi',{type:'unexcuseMission',requestId:`weekly-${++nextId}`,id:state.missionExcusals[0].id},new Date('2026-09-23T12:02:00Z'));
+  assert.equal(state.missionExcusals[0].revokedBy,'xavi');
+  assert.equal(state.weeklyBonuses.length,0);
+});
+
+test('excusing a once-per-week mission neutralizes it without creating a zero-XP super bonus',()=>{
+  let state=initialState('2026-09-21T08:00:00Z');
+  state.tasks=state.tasks.filter(task=>task.id==='new-food').map(task=>({...task,children:['aina'],allowExcusal:true}));
+  state=settleWeeklyBonuses(state,new Date('2026-09-21T08:00:00Z'));
+  state=applyAction(state,'xavi',{type:'excuseMission',requestId:`weekly-${++nextId}`,taskId:'new-food',child:'aina',day:'2026-09-22'},new Date('2026-09-23T12:00:00Z'));
+  assert.equal(state.missionExcusals[0].scope,'week');
+  assert.equal(state.missionExcusals[0].from,'2026-09-21');
+  assert.equal(state.missionExcusals[0].to,'2026-09-27');
+  assert.equal(state.weeklyBonuses.length,0);
+  assert.equal(totals(state,'aina').xp,0);
+});
+
 test('super bonus pays x5 total and replaces all per-task x2 bonuses', () => {
   let state = smallPlan();
   for (const day of ['2026-09-21', '2026-09-22']) {

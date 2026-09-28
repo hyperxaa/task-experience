@@ -1,5 +1,5 @@
 import { settleCycles, cycleSummary, madridInstant, nextClose, type Cycle, type CycleRule } from './cycles.ts';
-import { settleWeeklyBonuses, bonusWeek, includeApprovedTask, plannedTaskForDay, scheduledTasksForDay, type WeeklyPlan, type WeeklyBonus } from './weekly-bonuses.ts';
+import { settleWeeklyBonuses, bonusWeek, includeApprovedTask, plannedTaskForDay, scheduledTasksForDay, excusalForDay, type WeeklyPlan, type WeeklyBonus, type MissionExcusal } from './weekly-bonuses.ts';
 import { CLIENT_DISCOVERIES, DISCOVERY_IDS, discoveryWords, objectiveDiscoveryCandidates, type DiscoveryId } from './discoveries.ts';
 import { demoMembers, familyMembers, childrenOf, memberName, memberRole, type Member } from './family.ts';
 export type Lang = 'es' | 'ca' | 'en';
@@ -7,14 +7,14 @@ export type Child = string;
 export type Person = string;
 export type Status = 'pending' | 'changes' | 'approved' | 'archived';
 export type Words = { es: string; ca: string; en: string };
-export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; cadence?: 'daily' | 'weekly'; status: Status; author: Person; note: string; icon: string; created: string };
+export type Task = { id: string; title: string | Words; description: string | Words; xp: number; category: 'all-day' | 'morning' | 'afternoon' | 'evening'; children: Child[]; days: number[]; once: boolean; limit: number; cadence?: 'daily' | 'weekly'; allowExcusal?: boolean; status: Status; author: Person; note: string; icon: string; created: string };
 export type Reward = { id: string; title: string | Words; description: string | Words; xp: number; requiresSuperBonus?: boolean; children: Child[]; status: Status; author: Person; note: string; icon: string; limit: number; created: string };
 export type Adjustment = { id: string; at: string; actor: Person; from: number; to: number; reason: string; undoneBy?: string; undoOf?: string };
 export type Completion = { id: string; taskId: string; child: Child; title: string | Words; xp: number; day: string; at: string; actor: Person; reversed: boolean; reason?: string; correctedBy?: Person; originalXP?: number; icon?: string; category?: Task['category']; effectiveAt?: string; adjustments?: Adjustment[]; discoveryReset?: { at: string; actor: Person; requestId: string } };
 export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
-export type State = { version: 1; rulesVersion?: 2; members?: Member[]; setupMode?: 'demo' | 'custom'; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
+export type State = { version: 1; rulesVersion?: 2; members?: Member[]; setupMode?: 'demo' | 'custom'; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; missionExcusals?: MissionExcusal[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
 export type Action = { type: string; requestId: string; [key: string]: unknown };
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
@@ -61,7 +61,7 @@ export function availableSuperBonus(s: State, child: Child, rewardId: string) {
     .sort((a,b) => b.week.localeCompare(a.week))
     .find(bonus => !s.redemptions.some(redemption => redemption.child === child && redemption.rewardId === rewardId && redemption.bonusWeek === bonus.week && redemption.status !== 'cancelled'));
 }
-export function due(t: Task, child: Child, day: string, s: State) { const plan=s.weeklyPlans?.find(item=>item.week===bonusWeek(day));const planned=plan&&day>=(plan.startsOn??plan.week)?plannedTaskForDay(s,t.id,day):null;const scheduled=planned??(t.once||!plan||day<(plan.startsOn??plan.week)?t:null);return !!scheduled && scheduled.status === 'approved' && scheduled.children.includes(child) && (scheduled.once || scheduled.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (scheduled.once ? !s.completions.some(c => c.taskId === scheduled.id && c.child === child && !c.reversed) : scheduled.cadence === 'weekly' ? completed(s,scheduled,child,day) < scheduled.limit : true); }
+export function due(t: Task, child: Child, day: string, s: State) { const plan=s.weeklyPlans?.find(item=>item.week===bonusWeek(day));const planned=plan&&day>=(plan.startsOn??plan.week)?plannedTaskForDay(s,t.id,day):null;const scheduled=planned??(t.once||!plan||day<(plan.startsOn??plan.week)?t:null);return !!scheduled && !excusalForDay(s,scheduled.id,child,day) && scheduled.status === 'approved' && scheduled.children.includes(child) && (scheduled.once || scheduled.days.includes(new Date(day + 'T12:00:00Z').getUTCDay())) && (scheduled.once ? !s.completions.some(c => c.taskId === scheduled.id && c.child === child && !c.reversed) : scheduled.cadence === 'weekly' ? completed(s,scheduled,child,day) < scheduled.limit : true); }
 export function completed(s: State, t: Task, child: Child, day: string) { const scheduled=plannedTaskForDay(s,t.id,day)??t;const week=scheduled.cadence==='weekly'?weekBeginning(day,1):null; return s.completions.filter(c => c.taskId === t.id && c.child === child && !c.reversed && (scheduled.once || (week ? c.day>=week&&c.day<=shiftDay(week,6) : c.day === day))).length; }
 const w = (es: string, ca: string, en: string): Words => ({ es, ca, en });
 export function initialState(now = new Date().toISOString(), members: Member[] = demoMembers, mode: 'demo' | 'custom' = 'demo'): State {
@@ -100,7 +100,7 @@ export function initialState(now = new Date().toISOString(), members: Member[] =
     for (let index = specs.length - 1; index >= 0; index--) if (demoOnly.has(specs[index].id)) specs.splice(index, 1);
   }
   const preferences = Object.fromEntries(selected.map(member => [member.id, { lang: 'es' as Lang, goal: null }]));
-  return { version: 1, rulesVersion: 2, members: selected, setupMode: mode, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], seenCelebrations: {}, preferences, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
+  return { version: 1, rulesVersion: 2, members: selected, setupMode: mode, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], missionExcusals: [], seenCelebrations: {}, preferences, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
 }
 function requireThat(value: unknown, code = 'invalid') { if (!value) throw new DomainError(code); }
 function text(v: unknown, max = 160) { requireThat(typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max); return (v as string).trim(); }
@@ -130,6 +130,32 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     requireThat(due(t!,child,day,s),'notDue'); requireThat(!s.pauses.some(p=>!p.cancelledAt&&p.child===child&&day>=p.from&&day<=p.to),'paused');
     requireThat(completed(s,t!,child,day)<t!.limit,'already');
     s.completions.push({id:a.requestId, taskId:t!.id,child,title:t!.title,xp:t!.xp,originalXP:t!.xp,icon:t!.icon,category:t!.category,day,at,effectiveAt:day===today?at:madridInstant(day,typeof a.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(a.time)?a.time:'12:00'),actor,reversed:false}); log=words(t!.title);
+  } else if(a.type === 'excuseMission') {
+    requireParent();
+    const child=childFor(), day=dayValue(a.day ?? today), taskId=text(a.taskId,100);
+    requireThat(day<=today&&day>=shiftDay(today,-31),'date');
+    const task=s.tasks.find(item=>item.id===taskId), planned=plannedTaskForDay(s,taskId,day);
+    const scheduled=planned??(task?.once||!s.weeklyPlans?.some(plan=>plan.week===bonusWeek(day))?task:null);
+    requireThat(task&&task.allowExcusal===true&&scheduled&&!scheduled.once&&scheduled.status==='approved'&&scheduled.children.includes(child),'notDue');
+    requireThat(scheduledTasksForDay(s,day).some(item=>item.id===taskId),'notDue');
+    requireThat(!s.pauses.some(item=>!item.cancelledAt&&item.child===child&&day>=item.from&&day<=item.to),'paused');
+    const scope=scheduled!.cadence==='weekly'?'week':'day';
+    const from=scope==='week'?bonusWeek(day):day, to=scope==='week'?shiftDay(from,6):day;
+    requireThat(!s.missionExcusals?.some(item=>!item.revokedAt&&item.taskId===taskId&&item.child===child&&item.from===from),'already');
+    const alreadyCompleted=scope==='week'
+      ? s.completions.some(item=>item.taskId===taskId&&item.child===child&&!item.reversed&&item.xp>0&&item.day>=from&&item.day<=to)
+      : completed(s,scheduled!,child,day)>=scheduled!.limit;
+    requireThat(!alreadyCompleted,'already');
+    const reason=optional(a.reason,200);
+    s.missionExcusals??=[];
+    s.missionExcusals.push({id:a.requestId,taskId,child,scope,from,to,actor,at,...(reason?{reason}:{})});
+    log=`Omisión de misión: ${memberName(s,child)} · ${words(task!.title)} · ${from} — ${to}`;
+  } else if(a.type === 'unexcuseMission') {
+    requireParent();
+    const item=s.missionExcusals?.find(excusal=>excusal.id===a.id&&!excusal.revokedAt);
+    requireThat(item,'missing');
+    item!.revokedAt=at;item!.revokedBy=actor;
+    log=`Omisión revertida: ${memberName(s,item!.child)} · ${item!.from}`;
   } else if(a.type === 'egg') {
     const child=childFor(), egg=text(a.egg,40); requireThat(!parent&&actor===child,'forbidden'); requireThat(/^[a-z0-9-]+$/.test(egg));
     requireThat((DISCOVERY_IDS as readonly string[]).includes(egg),'invalid');
@@ -166,7 +192,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
       const once=a.once===true; requireThat(once||(a.days as number[]).length>0);
       requireThat(a.cadence===undefined||a.cadence==='daily'||a.cadence==='weekly');
       const cadence: NonNullable<Task['cadence']> = a.cadence==='weekly'?'weekly':'daily';
-      const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit,cadence};
+      const next={...item,category:a.category as Task['category'],days:[...new Set(a.days as number[])],once,limit:once?1:item.limit,cadence,allowExcusal:parent&&!once&&a.allowExcusal===true};
       s.tasks=old?s.tasks.map(x=>x.id===old.id?next:x):[...s.tasks,next];
       includeApprovedTask(s,next,today);
     } else {
@@ -282,5 +308,5 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
 export function visibleState(s: State, p: Person): State {
   if(isParent(p,s)) return {...s,processed:[]};
   const child=p as Child;
-  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),seenCelebrations:{[p]:s.seenCelebrations?.[p]??[]},changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
+  return {...s,tasks:s.tasks.filter(t=>t.children.includes(child)),rewards:s.rewards.filter(r=>r.children.includes(child)),completions:s.completions.filter(c=>c.child===child),redemptions:s.redemptions.filter(r=>r.child===child),pauses:s.pauses.filter(x=>x.child===child),missionExcusals:s.missionExcusals?.filter(item=>item.child===child),weeklyPlans:s.weeklyPlans?.map(plan=>({...plan,tasks:plan.tasks.filter(task=>task.children.includes(child))})),weeklyBonuses:s.weeklyBonuses?.filter(bonus=>bonus.child===child),seenCelebrations:{[p]:s.seenCelebrations?.[p]??[]},changes:s.changes?.filter(c=>c.actor===p),badges:s.badges?.filter(b=>b.child===child),cycles:s.cycles?.map(c=>({...c,snapshot:c.snapshot?{[child]:c.snapshot[child]} as Cycle['snapshot']:undefined})),audit:[],processed:[],preferences:{[p]:s.preferences[p]} as State['preferences']};
 }

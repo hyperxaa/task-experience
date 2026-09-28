@@ -84,7 +84,7 @@ test('access lifecycle: short session, remembered device, parent boundary and re
   assert.equal(setupCredentials.pendingCodes, undefined);
   assert.equal(typeof setupCredentials.pendingCodesEncrypted, 'string');
   assert.equal(JSON.stringify(setupCredentials).includes(codes.aina.join('.')), false);
-  assert.match(setup.setCookie, /Max-Age=43200/);
+  assert.match(setup.setCookie, /Max-Age=604800/);
   const code = (profile) => codes[profile].join('.');
 
   assert.equal((await request({ op: 'login', password: 'wrong', remember: true })).status, 400);
@@ -92,7 +92,7 @@ test('access lifecycle: short session, remembered device, parent boundary and re
   assert.equal(login.status, 200);
   assert.deepEqual(login.data.animalCodes, codes);
   assert.equal(JSON.parse(sql.prepare('SELECT credentials FROM family').get().credentials).pendingCodesEncrypted, undefined);
-  assert.match(login.setCookie, /Max-Age=43200/);
+  assert.match(login.setCookie, /Max-Age=604800/);
   assert.match(login.setCookie, /txp_remember=.*Max-Age=31536000/);
   assert.match(login.setCookie, /HttpOnly; SameSite=Strict/);
   assert.equal(sql.prepare('SELECT count(*) AS n FROM remember_devices').get().n, 1);
@@ -125,7 +125,7 @@ test('access lifecycle: short session, remembered device, parent boundary and re
   const transient = await request({ op: 'login', password, remember: false });
   assert.equal(transient.status, 200);
   assert.equal(transient.data.animalCodes, undefined);
-  assert.match(transient.setCookie, /Max-Age=43200/);
+  assert.match(transient.setCookie, /Max-Age=604800/);
   assert.match(transient.setCookie, /txp_remember=; Path=\/; HttpOnly; SameSite=Strict; Max-Age=0/);
   assert.equal(sql.prepare('SELECT count(*) AS n FROM remember_devices').get().n, 0);
 });
@@ -143,6 +143,63 @@ test('expired session restores from a rotating one-year device token', async () 
   assert.match(restored.setCookie, /txp_remember=.*Max-Age=\d+/);
   await request({ op: 'logout' });
   assert.equal(sql.prepare('SELECT count(*) AS n FROM remember_devices').get().n, 0);
+});
+
+test('adult timeout keeps family access, also with simultaneous reads', async () => {
+  await request({ op: 'login', password, remember: true });
+  await request({ op: 'unlock', code: codes.xavi.join('.') });
+  const remembered = jar.get('txp_remember');
+  const token = jar.get('txp_session');
+  sql.prepare('UPDATE sessions SET parent_until = 1 WHERE profile = ?').run('xavi');
+  const responses = await Promise.all(Array.from({ length: 3 }, () => request(null, { method: 'GET' })));
+  for (const result of responses) {
+    assert.equal(result.status, 200);
+    assert.equal(result.data.authenticated, true);
+    assert.equal(result.data.profile, null);
+    assert.equal(result.data.state, null);
+    assert.equal(result.setCookies.length, 0);
+  }
+  assert.equal(jar.get('txp_session'), token);
+  assert.equal(jar.get('txp_remember'), remembered);
+  assert.equal((await request({ op: 'export' })).status, 401);
+  assert.equal((await request({ op: 'unlock', code: codes.xavi.join('.') })).status, 200);
+  assert.equal((await request(null, { method: 'GET' })).data.profile, 'xavi');
+});
+
+test('concurrent restoration and late responses retain a single valid remembered device', async () => {
+  await request({ op: 'logout' });
+  await request({ op: 'login', password, remember: true });
+  const oldCookie = [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
+  const oldExpiry = sql.prepare('SELECT expires FROM remember_devices').get().expires;
+  sql.prepare('UPDATE sessions SET expires = 1').run();
+  const reads = await Promise.all(Array.from({ length: 4 }, () => request(null, { method: 'GET' })));
+  for (const result of reads) {
+    assert.equal(result.status, 200);
+    assert.equal(result.data.authenticated, true);
+    assert.doesNotMatch(result.setCookie, /Max-Age=0(?:;|$)/m);
+  }
+  assert.equal(sql.prepare('SELECT count(*) AS n FROM remember_devices').get().n, 1);
+  assert.equal(sql.prepare('SELECT expires FROM remember_devices').get().expires, oldExpiry);
+  assert.equal(sql.prepare('SELECT count(*) AS n FROM sessions').get().n, 1);
+  const replacement = jar.get('txp_remember');
+  const late = await handle(new Request('http://localhost/api/xp', { headers: { cookie: oldCookie } }));
+  assert.equal((await late.json()).authenticated, true);
+  assert.ok(late.headers.getSetCookie().some(value => value.startsWith(`txp_remember=${replacement};`)));
+  await request({ op: 'unlock', code: codes.aina.join('.') });
+  const superseded = await handle(new Request('http://localhost/api/xp', { headers: { cookie: oldCookie } }));
+  assert.equal(superseded.status, 409);
+  assert.equal(superseded.headers.getSetCookie().length, 0);
+  assert.equal((await request(null, { method: 'GET' })).data.profile, 'aina');
+  // Outside the short overlap window the predecessor no longer grants access.
+  sql.prepare('UPDATE remember_devices SET created = ?').run(Date.now() - 61000);
+  const expired = await handle(new Request('http://localhost/api/xp', { headers: { cookie: oldCookie } }));
+  assert.equal((await expired.json()).authenticated, false);
+  assert.equal(expired.headers.getSetCookie().length, 0);
+  assert.equal((await request(null, { method: 'GET' })).data.authenticated, true);
+  await request({ op: 'logout' });
+  const revoked = await handle(new Request('http://localhost/api/xp', { headers: { cookie: oldCookie } }));
+  assert.equal((await revoked.json()).authenticated, false);
+  assert.equal(sql.prepare('SELECT count(*) AS n FROM sessions').get().n, 0);
 });
 
 test('animal-code attempts are limited across all profiles', async () => {
