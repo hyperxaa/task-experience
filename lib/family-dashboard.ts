@@ -10,7 +10,8 @@ export type WeeklyEarningForecast = {
   week: string; current: boolean; taskChances: WeeklyTaskChance[]; earnedThisWeek: number;
   pendingBase: number; possibleTaskBonus: number; lostTaskBonus: number; superPossible: boolean;
   superBaseXp: number; paidTaskBonus: number; superPaid: number; noBonusTotal: number;
-  x2Total: number; x5Total: number; configuredBase: number; recommendation: { small: number; medium: number; large: number };
+  x2Total: number; x5Total: number; noBonusCeiling: number; x2Ceiling: number; x5Ceiling: number;
+  configuredBase: number; recommendation: { small: number; medium: number; large: number };
 };
 const DAY_MS = 86400000;
 const midnight = (day: string) => Date.parse(madridInstant(day, '00:00'));
@@ -83,8 +84,6 @@ export function weeklyEarningForecast(state: State, child: Child, week: string, 
     const perDay = new Map<string, number>();
     for (const item of completions) perDay.set(item.day, (perDay.get(item.day) ?? 0) + 1);
     const baseXp = completions.reduce((sum, item) => sum + item.xp, 0);
-    const allScheduledDates = Array.from({ length: 7 }, (_, offset) => addDays(monday, offset))
-      .filter(day => day >= planStart && day >= taskStart && task.days.includes(new Date(day + 'T12:00:00Z').getUTCDay()));
     const expected = task.cadence === 'weekly' ? task.limit : dates.length * task.limit;
     const count = completions.length;
     let missed = 0, pendingSlots = 0, possible: boolean;
@@ -108,7 +107,7 @@ export function weeklyEarningForecast(state: State, child: Child, week: string, 
     const possibleBonus = possible && individualBonusAllowed ? totalTaskXp : 0;
     const expectedBase = expected * task.xp;
     chances.push({ taskId: task.id, name: typeof task.title === 'string' ? task.title : task.title.es, possible, missed, pendingBase, possibleBonus, baseXp, expectedBase });
-    configuredBase += (task.cadence === 'weekly' ? Math.min(task.limit, allScheduledDates.length * task.limit) : allScheduledDates.length * task.limit) * task.xp;
+    configuredBase += expected * task.xp;
   }
   const bonusWeekRows = (state.weeklyBonuses ?? []).filter(item => item.child === child && item.week === week);
   const earnedThisWeek = state.completions.filter(item => item.child === child && item.day >= monday && item.day < end && !item.reversed).reduce((sum, item) => sum + item.xp, 0)
@@ -126,11 +125,20 @@ export function weeklyEarningForecast(state: State, child: Child, week: string, 
   const noBonusTotal = balance + pendingBase;
   const x2Total = noBonusTotal + possibleTaskBonus;
   const x5Total = superPaid > 0 ? noBonusTotal : noBonusTotal + missedBase - paidTaskBonus + superBaseXp * 4;
+  // These ceilings include today's available balance once, then add the full
+  // configured week's remaining theoretical earnings (including missed slots).
+  const noBonusCeiling = balance + pendingBase + missedBase;
+  const taskBonusCeiling = plan?.noTaskBonus?.length
+    ? chances.filter(item => !plan.noTaskBonus!.includes(item.taskId)).reduce((sum, item) => sum + item.expectedBase, 0)
+    : chances.reduce((sum, item) => sum + item.expectedBase, 0);
+  const x2Ceiling = superPaid > 0 ? noBonusCeiling : noBonusCeiling + Math.max(0, taskBonusCeiling - paidTaskBonus);
+  const x5Ceiling = superPaid > 0 ? noBonusCeiling : noBonusCeiling - paidTaskBonus + superBaseXp * 4;
   const small = configuredBase ? Math.max(1, Math.round(configuredBase / 7 / 5) * 5) : 0;
   const medium = configuredBase ? Math.max(small, Math.round(configuredBase / 2 / 5) * 5) : 0;
   const large = configuredBase ? Math.max(medium, Math.round(configuredBase / 5) * 5) : 0;
   return { week, current: week === bonusWeek(today), taskChances: chances, earnedThisWeek, pendingBase, possibleTaskBonus, lostTaskBonus,
-    superPossible, superBaseXp, paidTaskBonus, superPaid, noBonusTotal, x2Total, x5Total, configuredBase,
+    superPossible, superBaseXp, paidTaskBonus, superPaid, noBonusTotal, x2Total, x5Total,
+    noBonusCeiling, x2Ceiling, x5Ceiling, configuredBase,
     recommendation: { small, medium, large } };
 }
 

@@ -46,6 +46,7 @@
 .family-week-outlook>p{margin:8px 0;color:#b5c4d5;font-size:.76rem;line-height:1.6}
 .family-week-outlook>div{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px;color:#c5d2e1;font-size:.78rem}
 .family-week-outlook strong{white-space:nowrap;color:var(--child-color);font-size:.94rem;font-variant-numeric:tabular-nums}
+.family-week-outlook strong .family-week-ceiling{color:#aab9cc;font-size:.78rem;font-weight:500;margin-left:5px}
 .family-week-outlook strong.unreachable,.family-week-outlook .family-impossible-note{color:#f08c96}
 .family-week-outlook s{opacity:.9;text-decoration-thickness:2px}
 .family-chart-panel,.family-closing-panel{padding:24px;min-width:0}

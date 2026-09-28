@@ -104,6 +104,29 @@ test('a missed daily mission loses its ×2 and makes the ×5 unreachable; totals
   assert.equal(result.noBonusTotal, 45); // Current balance plus five remaining daily completions.
   assert.equal(result.x2Total, 45);
   assert.equal(result.x5Total, 75); // Theoretical full-week comparison remains visible despite being unreachable.
+  assert.equal(result.noBonusCeiling, 47);
+  assert.equal(result.x2Ceiling, 54);
+  assert.equal(result.x5Ceiling, 75);
+});
+
+test('weekly ceilings keep the balance once and count ×2 only for missions still achievable', () => {
+  const state = fixture('2026-09-28');
+  state.tasks[0].children = ['aina'];
+  const futureMission = { ...state.tasks[0], id: 'future', title: 'Future mission', xp: 3, days: [4, 5, 6, 0] };
+  state.tasks.push(futureMission);
+  const result = weeklyEarningForecast(state, 'aina', '2026-09-28', '2026-09-30', 40);
+  const missed = result.taskChances.find(item => item.taskId === 'bed');
+  const stillPossible = result.taskChances.find(item => item.taskId === 'future');
+  assert.equal(missed.possible, false);
+  assert.equal(missed.possibleBonus, 0);
+  assert.equal(stillPossible.possible, true);
+  assert.equal(stillPossible.possibleBonus, 12);
+  assert.equal(result.possibleTaskBonus, 12);
+  assert.equal(result.noBonusTotal, 57);
+  assert.equal(result.noBonusCeiling, 59);
+  assert.equal(result.x2Total, 69);
+  assert.equal(result.x2Ceiling, 78);
+  assert.equal(result.superPossible, false);
 });
 
 test('excused dates do not block the weekly bonuses and award no XP themselves', () => {

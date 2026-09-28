@@ -16,7 +16,7 @@ function LineSample({ dash }: { dash?: string }) {
   return <svg className="family-line-sample" viewBox="0 0 88 12" aria-hidden="true"><line x1="2" y1="6" x2="86" y2="6" stroke="currentColor" strokeWidth="3" strokeDasharray={dash}/></svg>;
 }
 
-export function FamilyDashboard({ state, lang }: { state: State; lang: Lang }) {
+export function FamilyDashboard({ state, lang, parent }: { state: State; lang: Lang; parent: boolean }) {
   const [mode, setMode] = useState<DashboardMode>('week');
   const [anchor, setAnchor] = useState(() => Date.now());
   const [hidden, setHidden] = useState<Child[]>([]);
@@ -78,6 +78,8 @@ export function FamilyDashboard({ state, lang }: { state: State; lang: Lang }) {
   const plainLabel = t('Sin nuevos bonus', 'Sense nous bonus', 'No new bonuses');
   const x2Label = t('Con bonus ×2', 'Amb bonus ×2', 'With ×2 bonuses');
   const bonusLabel = t('Con superbonus ×5', 'Amb superbonus ×5', 'With ×5 super bonus');
+  const hasForecast = (child: Child, estimate: number | null) => estimate !== null || (mode === 'week' && weeklyChartCompatible && !!weeklyForecasts[child]);
+  const balancePair = (current: number, ceiling: number) => <>{number(current)} <i>Xp</i><span className="family-week-ceiling">/ {number(ceiling)} Xp</span></>;
 
   return <div className="family-dashboard">
     <section className="panel family-dashboard-head">
@@ -120,11 +122,13 @@ export function FamilyDashboard({ state, lang }: { state: State; lang: Lang }) {
           </>}
         </div>}
         {weeklyForecasts[item.child] && <div className="family-week-outlook">
-          <h4>{t('Lo que aún podéis ganar esta semana', 'El que encara podeu guanyar aquesta setmana', 'What you can still earn this week')}</h4>
-          <p>{t('Cada misión tiene sus días. Si pasa un día sin hacerla, pierdes el bonus ×2 de esa misión. Para el ×5 hay que completar todas.', 'Cada missió té els seus dies. Si passa un dia sense fer-la, perds el bonus ×2 d’aquella missió. Per aconseguir el ×5 cal completar-les totes.', 'Each mission has its own days. Miss one and you lose that mission’s ×2 bonus. To get ×5, complete every mission.')}</p>
-          <div><span>{t('Sin nuevos bonus', 'Sense nous bonus', 'No new bonuses')}</span><strong>{number(weeklyForecasts[item.child].noBonusTotal)} Xp</strong></div>
-          <div><span>{t('Si se ganan los bonus ×2 posibles', 'Si s’aconsegueixen els bonus ×2 possibles', 'If all possible ×2 bonuses are earned')}</span><strong>{number(weeklyForecasts[item.child].x2Total)} Xp</strong></div>
-          <div><span>{t('Si se completa toda la semana ×5', 'Si es completa tota la setmana ×5', 'If the full week is completed ×5')}</span><strong className={!weeklyForecasts[item.child].superPossible?'unreachable':''}>{!weeklyForecasts[item.child].superPossible&&<s>{number(weeklyForecasts[item.child].x5Total)} Xp</s>}{weeklyForecasts[item.child].superPossible&&`${number(weeklyForecasts[item.child].x5Total)} Xp`}</strong></div>
+          <h4>{parent ? t('Previsión de saldo para esta semana', 'Previsió de saldo per a aquesta setmana', 'Balance outlook for this week') : t('Lo que aún podéis ganar esta semana', 'El que encara podeu guanyar aquesta setmana', 'What you can still earn this week')}</h4>
+          <p>{parent
+            ? t('Cada cifra muestra el saldo estimado al cierre / el máximo teórico de la semana. Los bonus ×2 se calculan por misión; el ×5 solo cuenta si todas las misiones son alcanzables.', 'Cada xifra mostra el saldo estimat en tancar / el màxim teòric de la setmana. Els bonus ×2 es calculen per missió; el ×5 només compta si totes les missions són assolibles.', 'Each figure shows the estimated closing balance / the week’s theoretical maximum. ×2 bonuses are calculated per mission; ×5 counts only while every mission remains achievable.')
+            : t('Cada misión tiene sus días. Si pasa un día sin hacerla, pierdes el bonus ×2 de esa misión. Para el ×5 hay que completar todas.', 'Cada missió té els seus dies. Si passa un dia sense fer-la, perds el bonus ×2 d’aquella missió. Per aconseguir el ×5 cal completar-les totes.', 'Each mission has its own days. Miss one and you lose that mission’s ×2 bonus. To get ×5, complete every mission.')}</p>
+          <div><span>{t('Sin nuevos bonus', 'Sense nous bonus', 'No new bonuses')}</span><strong>{balancePair(weeklyForecasts[item.child].noBonusTotal, weeklyForecasts[item.child].noBonusCeiling)}</strong></div>
+          <div><span>{parent ? t('Con los bonus ×2 que aún puede conseguir', 'Amb els bonus ×2 que encara pot aconseguir', 'With the ×2 bonuses still achievable') : t('Si se ganan los bonus ×2 posibles', 'Si s’aconsegueixen els bonus ×2 possibles', 'If all possible ×2 bonuses are earned')}</span><strong>{balancePair(weeklyForecasts[item.child].x2Total, weeklyForecasts[item.child].x2Ceiling)}</strong></div>
+          <div><span>{parent ? t('Con el superbonus ×5', 'Amb el superbonus ×5', 'With the ×5 super bonus') : t('Si se completa toda la semana ×5', 'Si es completa tota la setmana ×5', 'If the full week is completed ×5')}</span><strong className={!weeklyForecasts[item.child].superPossible?'unreachable':''}>{!weeklyForecasts[item.child].superPossible&&<s>{balancePair(weeklyForecasts[item.child].x5Total, weeklyForecasts[item.child].x5Ceiling)}</s>}{weeklyForecasts[item.child].superPossible&&balancePair(weeklyForecasts[item.child].x5Total, weeklyForecasts[item.child].x5Ceiling)}</strong></div>
           <small>{number(weeklyForecasts[item.child].superBaseXp)} Xp {t('de misiones ×5; sustituye los bonus ×2 ya sumados.', 'de missions ×5; substitueix els bonus ×2 ja sumats.', 'from missions ×5; replaces ×2 bonuses already counted.')}</small>
           {!weeklyForecasts[item.child].superPossible&&<p className="family-impossible-note">{t('Esta semana ya no se puede llegar al ×5.', 'Aquesta setmana ja no es pot arribar al ×5.', 'The ×5 bonus is no longer reachable this week.')}</p>}
           {weeklyForecasts[item.child].lostTaskBonus>0&&<p>{t('Bonus ×2 que ya no se pueden ganar:', 'Bonus ×2 que ja no es poden guanyar:', '×2 bonuses no longer available:')} −{number(weeklyForecasts[item.child].lostTaskBonus)} Xp</p>}
@@ -136,7 +140,7 @@ export function FamilyDashboard({ state, lang }: { state: State; lang: Lang }) {
       <div className="family-chart-heading"><div><h2><Trophy size={21}/>{t('Cómo crecen los Xp', 'Com creixen els Xp', 'How Xp grows')}</h2><p>{t('Acumulados desde el inicio del periodo. Los canjes no restan en esta gráfica.', 'Acumulats des de l’inici del període. Els bescanvis no resten en aquesta gràfica.', 'Cumulative earnings since this period began. Redemptions do not reduce this chart.')}</p></div>{open && <button className="family-forecast-toggle" aria-pressed={showForecast} onClick={() => setShowForecast(value => !value)}>{showForecast ? t('Ocultar previsiones', 'Amagar previsions', 'Hide forecasts') : t('Mostrar previsiones', 'Mostrar previsions', 'Show forecasts')}</button>}</div>
       {!visible.length ? <p className="family-empty">{t('Activa al menos una persona para ver sus datos.', 'Activa almenys una persona per veure les seves dades.', 'Select at least one child to see their data.')}</p> : <>
         <div className="family-chart-legend" aria-label={t('Leyenda de líneas', 'Llegenda de línies', 'Line legend')}>
-          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}><strong>{memberName(state, item.child)}</strong><span><LineSample/>{realLabel}</span>{open && showForecast && item.estimate !== null && <><span><LineSample dash="12 8"/>{plainLabel}</span>{weeklyChartCompatible&&<span><LineSample dash="7 5"/>{x2Label}</span>}{(mode==='week' ? weeklyForecasts[item.child]?.superPossible : true)&&<span><LineSample dash="2 6"/>{bonusLabel}</span>}</>}</div>)}
+          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}><strong>{memberName(state, item.child)}</strong><span><LineSample/>{realLabel}</span>{open && showForecast && hasForecast(item.child, item.estimate) && <><span><LineSample dash="12 8"/>{plainLabel}</span>{weeklyChartCompatible&&<span><LineSample dash="7 5"/>{x2Label}</span>}{(mode==='week' ? weeklyForecasts[item.child]?.superPossible : true)&&<span><LineSample dash="2 6"/>{bonusLabel}</span>}</>}</div>)}
         </div>
         <div className="family-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 22, right: 24, left: 0, bottom: 8 }} accessibilityLayer>
           <CartesianGrid stroke="#ffffff12" vertical={false}/>
@@ -146,7 +150,7 @@ export function FamilyDashboard({ state, lang }: { state: State; lang: Lang }) {
           {open && <ReferenceLine x={now} stroke="#abb8ce" strokeDasharray="3 4" label={{ value: t('Ahora', 'Ara', 'Now'), position: 'top', fill: '#bac7d8', fontSize: 11 }}/>}
           {stats.flatMap(item => {
             const child = item.child, name = memberName(state, child);
-            return [<Line key={child + '-actual'} type="linear" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>, ...(open && showForecast && item.estimate !== null ? [
+            return [<Line key={child + '-actual'} type="linear" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>, ...(open && showForecast && hasForecast(child, item.estimate) ? [
               <Line key={child + '-plain'} type="linear" dataKey={child + 'NoBonus'} name={name + ' · ' + plainLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="12 8" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>,
               ...(weeklyChartCompatible ? [<Line key={child + '-x2'} type="linear" dataKey={child + 'X2'} name={name + ' · ' + x2Label} stroke={color(child)} strokeWidth={2.5} strokeDasharray="7 5" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
               ...(mode==='week' ? (weeklyForecasts[child]?.superPossible ? [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []) : [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>]),
