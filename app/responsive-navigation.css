@@ -114,6 +114,28 @@
   }
 }
 
+@media (min-width: 761px) and (orientation: landscape) {
+  .sidebar > .brand {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .sidebar > .brand .brand-logo {
+    align-self: flex-start;
+    width: min(100%, 32dvh);
+    height: auto;
+    max-width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
+  }
+
+  .sidebar > .brand .brand-wordmark,
+  .sidebar > .brand .brand-xp-meter {
+    align-self: center;
+    margin-inline: auto;
+  }
+}
+
 /* On narrow screens, keep touch targets readable and let the bottom menu scroll. */
 @media (max-width: 760px) {
   .sidebar-scroll {
