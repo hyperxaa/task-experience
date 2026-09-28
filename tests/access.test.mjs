@@ -150,8 +150,17 @@ test('adult timeout keeps family access, also with simultaneous reads', async ()
   await request({ op: 'unlock', code: codes.xavi.join('.') });
   const remembered = jar.get('txp_remember');
   const token = jar.get('txp_session');
+  const initialDeadline = (await request(null, { method: 'GET' })).data.parentUntil;
+  assert.equal((await request(null, { method: 'GET' })).data.parentUntil, initialDeadline);
+  sql.prepare('UPDATE sessions SET parent_until = ? WHERE profile = ?').run(Date.now() + 1000, 'xavi');
+  const extended = await request(null, { method: 'GET', extraHeaders: { 'x-task-xp-activity': '1' } });
+  assert.equal(extended.data.profile, 'xavi');
+  assert.ok(extended.data.parentUntil > Date.now() + 59 * 60 * 1000);
   sql.prepare('UPDATE sessions SET parent_until = 1 WHERE profile = ?').run('xavi');
-  const responses = await Promise.all(Array.from({ length: 3 }, () => request(null, { method: 'GET' })));
+  const responses = await Promise.all([
+    request(null, { method: 'GET', extraHeaders: { 'x-task-xp-activity': '1' } }),
+    ...Array.from({ length: 2 }, () => request(null, { method: 'GET' })),
+  ]);
   for (const result of responses) {
     assert.equal(result.status, 200);
     assert.equal(result.data.authenticated, true);

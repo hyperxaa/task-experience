@@ -17,7 +17,7 @@ const animalIds = ['bengal', 'panda', 'fox', 'otter', 'owl', 'frog', 'lion', 'bu
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEVICE_MS = 365 * 24 * 60 * 60 * 1000;
 const DEVICE_ROTATION_GRACE_MS = 60 * 1000;
-const PARENT_MS = 15 * 60 * 1000;
+const PARENT_MS = 60 * 60 * 1000;
 const db = () => (globalThis as typeof globalThis & { __taskXpTestDB?: ReturnType<typeof getDatabase> }).__taskXpTestDB ?? getDatabase();
 const hex = (value: Buffer) => value.toString('hex');
 const random = () => hex(randomBytes(32));
@@ -222,6 +222,15 @@ export async function handle(request: Request) {
       // Lock the adult profile, not the family device. Do not rotate cookies on a
       // background GET: simultaneous tabs must not invalidate each other's sessions.
       await db().prepare('UPDATE sessions SET profile = NULL, parent_until = 0 WHERE token = ? AND parent_until > 0 AND parent_until <= ?').bind(session.token, Date.now()).run();
+      session = await readSession(request);
+      if (!session) return reply({ error: 'conflict' }, 409);
+    }
+    if (request.method === 'GET' && request.headers.get('x-task-xp-activity') === '1' && session?.profile && row && isParent(session.profile, JSON.parse(row.data) as State)) {
+      const now = Date.now();
+      const parentUntil = now + PARENT_MS;
+      // Only a still-unlocked adult can extend access. The max expression keeps
+      // concurrent tabs from moving the deadline backwards.
+      await db().prepare('UPDATE sessions SET parent_until = MAX(parent_until, ?) WHERE token = ? AND profile = ? AND parent_until > ?').bind(parentUntil, session.token, session.profile, now).run();
       session = await readSession(request);
       if (!session) return reply({ error: 'conflict' }, 409);
     }
