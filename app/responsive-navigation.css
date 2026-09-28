@@ -142,6 +142,20 @@
   }
 }
 
+/* In short landscape layouts, scroll the complete sidebar, including its brand. */
+@media (min-width: 761px) and (max-height: 760px) and (orientation: landscape) {
+  .sidebar {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .sidebar-scroll {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+}
+
 /* On narrow screens, keep touch targets readable and let the bottom menu scroll. */
 @media (max-width: 760px) {
   .sidebar-scroll {
@@ -285,6 +299,102 @@
     z-index: 1;
     margin-left: auto;
     gap: 8px;
+  }
+}
+
+/* Use the same centered cup layout on phones; the tablet-only rules missed narrow mobile widths. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .topbar {
+    position: relative;
+    padding: 0 10px;
+  }
+
+  .topbar .mobile-brand {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+
+  .mobile-brand .brand {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  .mobile-brand .brand-logo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: clamp(42px, 10vw, 58px);
+    height: clamp(42px, 10vw, 58px);
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+  }
+
+  .mobile-brand .brand-wordmark {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + clamp(27px, 6vw, 35px));
+    right: 93px;
+    display: block;
+    overflow: hidden;
+    font-size: clamp(.48rem, 2.5vw, .7rem);
+    white-space: nowrap;
+    text-overflow: clip;
+    transform: translateY(-50%);
+    pointer-events: auto;
+  }
+
+  .mobile-brand .brand-xp-meter {
+    position: absolute;
+    top: 50%;
+    left: clamp(8px, 2.8vw, 18px);
+    margin: 0;
+    padding: 5px 8px;
+    font-size: .72rem;
+    transform: translateY(-50%);
+  }
+
+  .topbar .top-actions {
+    position: relative;
+    z-index: 1;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .top-actions [data-slot="select-trigger"] {
+    min-height: 34px;
+    padding-inline: 2px;
+  }
+
+  .profile-switch {
+    padding-left: 3px;
+  }
+}
+
+@media (max-width: 400px) and (orientation: portrait) {
+  .mobile-brand .brand-wordmark {
+    font-size: clamp(.48rem, 2vw, .62rem);
+  }
+
+}
+
+@media (max-width: 380px) and (orientation: portrait) {
+  .mobile-brand .brand-wordmark {
+    font-size: .4rem;
+  }
+}
+
+@media (max-width: 360px) and (orientation: portrait) {
+  .mobile-brand .brand-wordmark {
+    display: none;
   }
 }
 
