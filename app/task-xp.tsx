@@ -24,6 +24,7 @@ import './discoveries.css';
 import './bonus-rules.css';
 import './family-setup.css';
 import './completion-glow.css';
+import './responsive-navigation.css';
 import { weekOrder } from '@/lib/cycles';
 import { CorrectionForm, ButtonHints } from './activity-controls';
 import { AnimalPad, AnimalCodePicker, CodeReveal, type AnimalId } from './animal-access';
