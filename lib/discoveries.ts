@@ -1,4 +1,4 @@
-import type { Child, Lang, State, Words } from './domain.ts';
+import type { Child, Completion, Lang, State, Words } from './domain.ts';
 
 export const DISCOVERY_IDS = [
   'kind-heart','three-in-a-row','returning-player','first-task','five-today','seven-today','full-day','bed-boss','backpack-pro','shower-power',
@@ -9,6 +9,28 @@ export const DISCOVERY_IDS = [
 ] as const;
 export type DiscoveryId = typeof DISCOVERY_IDS[number];
 export const CLIENT_DISCOVERIES = new Set<DiscoveryId>(['kind-heart','explorer-three','explorer-all','logo-tap','phrase-switch','house-scout']);
+export const XP_DISCOVERIES = new Set<DiscoveryId>(['xp-twenty-five','xp-fifty','xp-hundred','xp-two-fifty','xp-five-hundred','cycle-twenty-five','month-hundred']);
+const monthlyInstance = /^month-hundred-(\d{4}-(?:0[1-9]|1[0-2]))$/;
+const madridMonth = (at: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit' }).format(new Date(at));
+export function discoveryInstanceId(id: string, day: string) { return id === 'month-hundred' ? `${id}-${day.slice(0,7)}` : id; }
+export function discoveryIdForCompletion(item: Pick<Completion, 'taskId' | 'day'>) {
+  const id = item.taskId.startsWith('egg-') ? item.taskId.slice(4) : item.taskId;
+  return discoveryInstanceId(id, item.day);
+}
+export function discoveryBaseId(id: string): DiscoveryId | null {
+  if (monthlyInstance.test(id)) return 'month-hundred';
+  return (DISCOVERY_IDS as readonly string[]).includes(id) ? id as DiscoveryId : null;
+}
+export function validDiscoveryCompletion(item: Pick<Completion, 'taskId' | 'day'>) {
+  if (!item.taskId.startsWith('egg-')) return false;
+  const id = item.taskId.slice(4), match = monthlyInstance.exec(id);
+  return match ? match[1] === item.day.slice(0,7) : (DISCOVERY_IDS as readonly string[]).includes(id);
+}
+export function monthlyEarnedXp(state: State, child: Child, month: string) {
+  const completions = state.completions.filter(item => item.child === child && !item.reversed && item.day.slice(0,7) === month).reduce((sum,item) => sum + item.xp,0);
+  const bonuses = (state.weeklyBonuses ?? []).filter(item => item.child === child && madridMonth(item.at) === month).reduce((sum,item) => sum + item.xp,0);
+  return completions + bonuses;
+}
 
 const titles: Record<DiscoveryId, Words> = {
   'kind-heart':{es:'Corazón curioso',ca:'Cor curiós',en:'Curious heart'},
@@ -62,8 +84,19 @@ const titles: Record<DiscoveryId, Words> = {
   'house-scout':{es:'Exploradora de la casa',ca:'Exploradora de la casa',en:'House explorer'},
   'five-unique':{es:'Cinco misiones distintas',ca:'Cinc missions diferents',en:'Five different missions'},
 };
-export function discoveryTitle(id: string, lang: Lang) { return titles[id as DiscoveryId]?.[lang] ?? id; }
-export function discoveryWords(id: DiscoveryId): Words { return titles[id]; }
+export function discoveryWords(id: string): Words | null {
+  const match = monthlyInstance.exec(id);
+  if (match) {
+    const date = new Date(`${match[1]}-01T12:00:00Z`);
+    return {
+      es: `100 Xp en ${new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric',timeZone:'UTC'}).format(date)}`,
+      ca: `100 Xp · ${new Intl.DateTimeFormat('ca-ES',{month:'long',year:'numeric',timeZone:'UTC'}).format(date)}`,
+      en: `100 Xp in ${new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric',timeZone:'UTC'}).format(date)}`,
+    };
+  }
+  return titles[id as DiscoveryId] ?? null;
+}
+export function discoveryTitle(id: string, lang: Lang) { return discoveryWords(id)?.[lang] ?? id; }
 
 const taskDiscoveries: Record<string,DiscoveryId> = {bed:'bed-boss',bag:'backpack-pro',shower:'shower-power',room:'room-rescue',table:'table-team',laundry:'laundry-legend',plan:'plan-master',dress:'ready-dressed',clothes:'tomorrow-ready'};
 function shift(day:string,amount:number){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+amount);return d.toISOString().slice(0,10);}
@@ -79,7 +112,7 @@ export function objectiveDiscoveryCandidates(state:State,child:Child,today:strin
   const categories=new Set(todayItems.map(item=>item.category));
   const activeDays=new Set(completed.map(item=>item.day));
   const recentXp=completed.filter(item=>item.day>=shift(today,-6)).reduce((sum,item)=>sum+item.xp,0);
-  const monthXp=completed.filter(item=>item.day.slice(0,7)===today.slice(0,7)).reduce((sum,item)=>sum+item.xp,0);
+  const monthXp=monthlyEarnedXp(state,child,today.slice(0,7));
   const timed=todayItems.filter(item=>item.effectiveAt);
   add('first-task',completed.length>=1);
   add('three-in-a-row',todayItems.length>=3);

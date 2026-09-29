@@ -3,8 +3,8 @@ import { promisify } from 'node:util';
 import { getDatabase, type BoundStatement } from '../db/platform';
 import { applyAction, initialState, migrateState, visibleState, isParent, DomainError, type Person, type State, type Action } from './domain';
 import { demoMembers, familyMembers, memberRole, parseFamilyMembers, type Member } from './family';
-import { settleWeeklyBonuses } from './weekly-bonuses';
 import { settleCycles } from './cycles';
+import { settleXpDiscoveries } from './xp-discoveries';
 import { parseExportedState } from './state-import';
 import { runtimeConfig } from './runtime-config';
 import { hashArgon2id, verifyArgon2id } from './auth-argon';
@@ -244,7 +244,8 @@ export async function handle(request: Request) {
     }
     if (row && session?.profile) {
       for (let retry = 0; retry < 5; retry++) {
-        const data = JSON.stringify(settleCycles(settleWeeklyBonuses(migrateState(JSON.parse(row.data)))));
+        const now=new Date();
+        const data = JSON.stringify(settleCycles(settleXpDiscoveries(migrateState(JSON.parse(row.data)),now,null,`read-${now.getTime()}`),now));
         if (data === row.data) break;
         const result = await db().prepare('UPDATE family SET data = ?, revision = revision + 1 WHERE id = 1 AND revision = ?').bind(data, row.revision).run();
         if (result.meta.changes) { row = { ...row, data, revision: row.revision + 1 }; break; }
@@ -363,7 +364,8 @@ export async function handle(request: Request) {
       const previous = migrateState(JSON.parse(row.data) as State);
       const next = op === 'import' ? parseExportedState(body.backup) : initialState(new Date().toISOString(), familyMembers(previous), previous.setupMode ?? 'demo');
       if (op === 'import' && JSON.stringify(familyMembers(next)) !== JSON.stringify(familyMembers(previous))) throw new DomainError('invalid');
-      const data = JSON.stringify(settleCycles(settleWeeklyBonuses(next)));
+      const now=new Date();
+      const data = JSON.stringify(settleCycles(settleXpDiscoveries(next,now,null,`import-${now.getTime()}`),now));
       const result = await db().prepare('UPDATE family SET data = ?, revision = revision + 1 WHERE id = 1 AND revision = ?').bind(data, row.revision).run();
       if (!result.meta.changes) return reply({ error: 'conflict' }, 409);
       return reply({ ok: true, state: visibleState(JSON.parse(data), session.profile) });

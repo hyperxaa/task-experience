@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DomainError, migrateState, type State } from './domain.ts';
-import { DISCOVERY_IDS } from './discoveries.ts';
+import { discoveryIdForCompletion, validDiscoveryCompletion } from './discoveries.ts';
 import { childrenOf, familyMembers } from './family.ts';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
@@ -27,7 +27,7 @@ const cycle = cycleRule.extend({ id:instant,start:instant,end:instant,closed:z.b
 const change = z.object({ id:z.string(),at:instant,actor:person,title:z.string(),collection:z.enum(['tasks','rewards','pauses','redemptions']),key:z.string(),before:z.union([task,reward,pause,redemption]).optional(),after:z.union([task,reward,pause,redemption]).optional(),undoneBy:z.string().optional() }).strict();
 const preference = z.object({ lang:z.enum(['es','ca','en']),goal:z.string().nullable() }).strict();
 const stateSchema = z.object({
-  version:z.literal(1),rulesVersion:z.literal(2).optional(),members:z.array(member).min(2).max(12).optional(),setupMode:z.enum(['demo','custom']).optional(),tasks:z.array(task),rewards:z.array(reward),completions:z.array(completion),redemptions:z.array(redemption),pauses:z.array(pause),missionExcusals:z.array(missionExcusal).optional(),weeklyPlans:z.array(weeklyPlan).optional(),weeklyBonuses:z.array(weeklyBonus).optional(),seenCelebrations:z.record(z.array(z.string())).optional(),
+  version:z.literal(1),rulesVersion:z.literal(2).optional(),xpAwardsVersion:z.literal(1).optional(),members:z.array(member).min(2).max(12).optional(),setupMode:z.enum(['demo','custom']).optional(),tasks:z.array(task),rewards:z.array(reward),completions:z.array(completion),redemptions:z.array(redemption),pauses:z.array(pause),missionExcusals:z.array(missionExcusal).optional(),weeklyPlans:z.array(weeklyPlan).optional(),weeklyBonuses:z.array(weeklyBonus).optional(),seenCelebrations:z.record(z.array(z.string())).optional(),
   preferences:z.record(preference),weekStart:z.number().int().min(0).max(6),cycleRule:cycleRule.optional(),cycles:z.array(cycle).optional(),changes:z.array(change).optional(),badges:z.array(z.object({child,threshold:z.number().int().min(1),at:instant}).strict()).optional(),processed:z.array(z.string()),audit:z.array(z.object({at:instant,actor:person,action:z.string(),title:z.string()}).strict()),
 }).strict();
 
@@ -48,11 +48,10 @@ export function parseExportedState(value: unknown): State {
   }
   const knownTasks = new Set([...state.tasks,...(state.weeklyPlans??[]).flatMap(plan=>plan.tasks)].map(item=>item.id));
   const knownRewards = new Set(state.rewards.map(item=>item.id));
-  const discoveries = new Set<string>(DISCOVERY_IDS);
   if (state.completions.some(item=>item.xp>(item.originalXP??item.xp)||item.reversed!== (item.xp===0)||item.discoveryReset&&(!item.taskId.startsWith('egg-')||item.xp!==0)||(
-    item.taskId.startsWith('egg-') ? !discoveries.has(item.taskId.slice(4)) || item.originalXP!==undefined&&item.originalXP!==1 : !knownTasks.has(item.taskId)
+    item.taskId.startsWith('egg-') ? !validDiscoveryCompletion(item) || item.originalXP!==undefined&&item.originalXP!==1 : !knownTasks.has(item.taskId)
   ))) throw new DomainError('invalidBackup');
-  const discoveryClaims=state.completions.filter(item=>item.taskId.startsWith('egg-')&&!item.discoveryReset).map(item=>`${item.child}:${item.taskId}`);
+  const discoveryClaims=state.completions.filter(item=>item.taskId.startsWith('egg-')&&!item.discoveryReset).map(item=>`${item.child}:${discoveryIdForCompletion(item)}`);
   if(new Set(discoveryClaims).size!==discoveryClaims.length) throw new DomainError('invalidBackup');
   if (state.redemptions.some(item=>!knownRewards.has(item.rewardId))) throw new DomainError('invalidBackup');
   const plans=state.weeklyPlans??[];

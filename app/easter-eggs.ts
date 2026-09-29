@@ -1,12 +1,12 @@
 import type { Child, State } from '@/lib/domain';
-import { DISCOVERY_IDS, objectiveDiscoveryCandidates } from '@/lib/discoveries';
+import { DISCOVERY_IDS, XP_DISCOVERIES, discoveryIdForCompletion, discoveryInstanceId, objectiveDiscoveryCandidates } from '@/lib/discoveries';
 
 export type EggSignals = { tabs: number; logo: number; phrases: number; house: number };
 export const EGG_IDS = DISCOVERY_IDS;
 export const defaultEggSignals: EggSignals = { tabs: 0, logo: 0, phrases: 0, house: 0 };
 
 export function discoveredEggIds(completions: State['completions'], child: Child): Set<string> {
-  return new Set(completions.filter(item => item.child === child && !item.discoveryReset && item.taskId.startsWith('egg-')).map(item => item.taskId.slice(4)));
+  return new Set(completions.filter(item => item.child === child && !item.discoveryReset && item.taskId.startsWith('egg-')).map(discoveryIdForCompletion));
 }
 
 export function eggResetEpoch(completions: State['completions'], child: Child): string {
@@ -14,7 +14,7 @@ export function eggResetEpoch(completions: State['completions'], child: Child): 
 }
 
 export function eggCandidates(state: State, child: Child, today: string, signals: EggSignals) {
-  const ids: string[] = [...objectiveDiscoveryCandidates(state, child, today)];
+  const ids: string[] = [...objectiveDiscoveryCandidates(state, child, today)].filter(id => !XP_DISCOVERIES.has(id) || state.completions.some(item => item.child === child && item.discoveryReset && discoveryIdForCompletion(item) === discoveryInstanceId(id,today)));
   if (signals.tabs >= 3) ids.push('explorer-three');
   if (signals.tabs >= 4) ids.push('explorer-all');
   if (signals.logo >= 3) ids.push('logo-tap');

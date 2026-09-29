@@ -1,6 +1,7 @@
 import { settleCycles, cycleSummary, madridInstant, nextClose, type Cycle, type CycleRule } from './cycles.ts';
 import { settleWeeklyBonuses, bonusWeek, includeApprovedTask, plannedTaskForDay, scheduledTasksForDay, excusalForDay, type WeeklyPlan, type WeeklyBonus, type MissionExcusal } from './weekly-bonuses.ts';
-import { CLIENT_DISCOVERIES, DISCOVERY_IDS, discoveryWords, objectiveDiscoveryCandidates, type DiscoveryId } from './discoveries.ts';
+import { CLIENT_DISCOVERIES, DISCOVERY_IDS, XP_DISCOVERIES, discoveryIdForCompletion, discoveryInstanceId, discoveryWords, objectiveDiscoveryCandidates, type DiscoveryId } from './discoveries.ts';
+import { awardCrossedXpDiscoveries, settleXpDiscoveries } from './xp-discoveries.ts';
 import { demoMembers, familyMembers, childrenOf, memberName, memberRole, type Member } from './family.ts';
 export type Lang = 'es' | 'ca' | 'en';
 export type Child = string;
@@ -14,7 +15,7 @@ export type Completion = { id: string; taskId: string; child: Child; title: stri
 export type Redemption = { id: string; rewardId: string; child: Child; title: string | Words; xp: number; bonusWeek?: string; status: 'pending' | 'confirmed' | 'fulfilled' | 'cancelled'; at: string; note: string; actor?: Person };
 export type Pause = { id: string; child: Child; from: string; to: string; reason: string; cancelledAt?: string };
 export type Change = { id: string; at: string; actor: Person; title: string; collection: 'tasks' | 'rewards' | 'pauses' | 'redemptions'; key: string; before?: Task | Reward | Pause | Redemption; after?: Task | Reward | Pause | Redemption; undoneBy?: string };
-export type State = { version: 1; rulesVersion?: 2; members?: Member[]; setupMode?: 'demo' | 'custom'; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; missionExcusals?: MissionExcusal[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
+export type State = { version: 1; rulesVersion?: 2; xpAwardsVersion?: 1; members?: Member[]; setupMode?: 'demo' | 'custom'; tasks: Task[]; rewards: Reward[]; completions: Completion[]; redemptions: Redemption[]; pauses: Pause[]; missionExcusals?: MissionExcusal[]; weeklyPlans?: WeeklyPlan[]; weeklyBonuses?: WeeklyBonus[]; seenCelebrations?: Partial<Record<Person,string[]>>; preferences: Record<Person, { lang: Lang; goal: string | null }>; weekStart: number; cycleRule?: CycleRule; cycles?: Cycle[]; changes?: Change[]; badges?: { child: Child; threshold: number; at: string }[]; processed: string[]; audit: { at: string; actor: Person; action: string; title: string }[] };
 export type Action = { type: string; requestId: string; [key: string]: unknown };
 export class DomainError extends Error { code: string; constructor(code: string) { super(code); this.code = code; } }
 export const names: Record<Person, string> = { aina: 'Aina', iara: 'Iara', xavi: 'Xavi', mireia: 'Mireia' };
@@ -100,7 +101,7 @@ export function initialState(now = new Date().toISOString(), members: Member[] =
     for (let index = specs.length - 1; index >= 0; index--) if (demoOnly.has(specs[index].id)) specs.splice(index, 1);
   }
   const preferences = Object.fromEntries(selected.map(member => [member.id, { lang: 'es' as Lang, goal: null }]));
-  return { version: 1, rulesVersion: 2, members: selected, setupMode: mode, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], missionExcusals: [], seenCelebrations: {}, preferences, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
+  return { version: 1, rulesVersion: 2, xpAwardsVersion: 1, members: selected, setupMode: mode, tasks: specs, rewards: [sleepover], completions: [], redemptions: [], pauses: [], missionExcusals: [], seenCelebrations: {}, preferences, weekStart:1, cycleRule:{day:1,time:'00:00'}, processed:[], audit:[] };
 }
 function requireThat(value: unknown, code = 'invalid') { if (!value) throw new DomainError(code); }
 function text(v: unknown, max = 160) { requireThat(typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max); return (v as string).trim(); }
@@ -119,7 +120,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   requireThat(memberRole(original, actor) !== null,'forbidden');
   requireThat(typeof a.requestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(a.requestId));
   if(original.processed.includes(a.requestId)) return original;
-  const s: State = settleCycles(settleWeeklyBonuses(migrateState(structuredClone(original)),now),now); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor,s);
+  const s: State = settleCycles(settleXpDiscoveries(migrateState(structuredClone(original)),now,actor,`${a.requestId}-settlement`),now); const beforeXp=structuredClone(s); const at = now.toISOString(); const today = dateInMadrid(now); const parent = isParent(actor,s);
   const requireParent = () => requireThat(parent,'forbidden');
   const childFor = (): Child => { const c = a.child; requireThat(typeof c === 'string' && childrenOf(s).includes(c)); requireThat(parent||c===actor,'forbidden'); return c as Child; };
   let log = a.type;
@@ -159,9 +160,12 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
   } else if(a.type === 'egg') {
     const child=childFor(), egg=text(a.egg,40); requireThat(!parent&&actor===child,'forbidden'); requireThat(/^[a-z0-9-]+$/.test(egg));
     requireThat((DISCOVERY_IDS as readonly string[]).includes(egg),'invalid');
+    const key=discoveryInstanceId(egg,today);
+    const resetClaim=s.completions.some(c=>c.child===child&&c.discoveryReset&&discoveryIdForCompletion(c)===key);
+    requireThat(!XP_DISCOVERIES.has(egg as DiscoveryId)||resetClaim,'notDue');
     requireThat(CLIENT_DISCOVERIES.has(egg as DiscoveryId)||objectiveDiscoveryCandidates(s,child,today).includes(egg as DiscoveryId),'notDue');
-    requireThat(!s.completions.some(c=>c.taskId===`egg-${egg}`&&c.child===child&&!c.discoveryReset),'already');
-    s.completions.push({id:a.requestId,taskId:`egg-${egg}`,child,title:discoveryWords(egg as DiscoveryId),xp:1,originalXP:1,icon:'sparkles',category:'afternoon',day:today,at,effectiveAt:at,actor,reversed:false});log='Descubrimiento';
+    requireThat(!s.completions.some(c=>c.child===child&&!c.discoveryReset&&c.taskId.startsWith('egg-')&&discoveryIdForCompletion(c)===key),'already');
+    s.completions.push({id:a.requestId,taskId:`egg-${key}`,child,title:discoveryWords(key)!,xp:1,originalXP:1,icon:'sparkles',category:'afternoon',day:today,at,effectiveAt:at,actor,reversed:false});log='Descubrimiento';
   } else if(a.type === 'reverse' || a.type === 'uncomplete' || a.type === 'undoAdjustment') {
     const c = s.completions.find(x=>x.id===a.id); requireThat(c,'missing');
     if(a.type==='reverse') requireParent();
@@ -299,6 +303,7 @@ export function applyAction(original: State, actor: Person, a: Action, now = new
     for(const collection of ['tasks','rewards','pauses','redemptions'] as const){for(const item of s[collection]){const before=original[collection].find(x=>x.id===item.id);if(JSON.stringify(before)!==JSON.stringify(item))s.changes.push({id:a.requestId,at,actor,title:log,collection,key:item.id,before:before?structuredClone(before):undefined,after:structuredClone(item)});}}
   }
   settleWeeklyBonuses(s,now);
+  awardCrossedXpDiscoveries(beforeXp,s,actor,at,a.requestId);
   s.badges ??= [];
   for(const child of childrenOf(s))for(const threshold of [1,10,25,50,100]){const valid=s.completions.filter(c=>c.child===child&&!c.reversed&&!c.taskId.startsWith('egg-')).sort((a,b)=>a.at.localeCompare(b.at));if(valid.length>=threshold&&!s.badges.some(b=>b.child===child&&b.threshold===threshold))s.badges.push({child,threshold,at:valid[threshold-1].at});}
   s.processed.push(a.requestId);
