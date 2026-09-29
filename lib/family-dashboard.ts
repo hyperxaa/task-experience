@@ -79,7 +79,7 @@ export function weeklyEarningForecast(state: State, child: Child, week: string, 
     const taskStart = plan?.taskStartsOn?.[task.id] ?? monday;
     const dates = Array.from({ length: 7 }, (_, offset) => addDays(monday, offset))
       .filter(day => day >= planStart && day >= taskStart && task.days.includes(new Date(day + 'T12:00:00Z').getUTCDay()) && !paused(state, child, day) && !excusalForDay(state, task.id, child, day));
-    if (!dates.length || (task.cadence === 'weekly' && excusalForDay(state, task.id, child, week))) continue;
+    if (!dates.length || (task.cadence === 'weekly' && excusalForDay(state, task.id, child, week)?.scope === 'week')) continue;
     const completions = state.completions.filter(item => item.child === child && item.taskId === task.id && item.day >= monday && item.day < end && !item.reversed && item.xp > 0);
     const perDay = new Map<string, number>();
     for (const item of completions) perDay.set(item.day, (perDay.get(item.day) ?? 0) + 1);

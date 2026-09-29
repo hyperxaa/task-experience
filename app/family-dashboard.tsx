@@ -17,6 +17,7 @@ function LineSample({ dash }: { dash?: string }) {
 }
 
 export function FamilyDashboard({ state, lang, parent }: { state: State; lang: Lang; parent: boolean }) {
+  const dashboardState=useMemo(()=>state.familyDashboard?{...state,...state.familyDashboard}:state,[state]);
   const [mode, setMode] = useState<DashboardMode>('week');
   const [anchor, setAnchor] = useState(() => Date.now());
   const [hidden, setHidden] = useState<Child[]>([]);
@@ -31,13 +32,13 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const visible = children.filter(child => !hidden.includes(child));
   const model = useMemo(() => {
     const now = new Date().getTime();
-    return { ...dashboardModel(state, childrenOf(state), mode, anchor, now), now };
-  }, [state, mode, anchor]);
+    return { ...dashboardModel(dashboardState, childrenOf(state), mode, anchor, now), now };
+  }, [dashboardState, state, mode, anchor]);
   const { period, open, now } = model;
   const today = dateInMadrid(new Date(now));
   const currentBonusWeek = bonusWeek(today);
   const weeklyForecasts = mode === 'week' && open && period.start < Date.parse(madridInstant(addDays(currentBonusWeek, 7), '00:00'))
-    ? Object.fromEntries(children.map(child => [child, weeklyEarningForecast(state, child, currentBonusWeek, today, totals(state, child).balance)]))
+    ? Object.fromEntries(children.map(child => [child, weeklyEarningForecast(dashboardState, child, currentBonusWeek, today, totals(dashboardState, child).balance)]))
     : {};
   const weeklyChartCompatible = mode === 'week' && open && period.start === Date.parse(madridInstant(currentBonusWeek, '00:00')) && period.end === Date.parse(madridInstant(addDays(currentBonusWeek, 7), '00:00'));
   const series = model.series.map(point => {
@@ -71,8 +72,8 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     : format(at, { day: 'numeric', month: 'short' });
   const ticks = series.filter((point, index) => point.at !== now && (index === 0 || index === series.length - 1 || (mode === 'day' ? index % 3 === 0 : mode === 'week' ? true : mode === 'month' ? index % 5 === 0 : new Date(Number(point.at)).toLocaleString('en-CA', { day: '2-digit', timeZone: 'Europe/Madrid' }) === '01'))).map(point => Number(point.at));
   const recent = (['day', 'week', 'month', 'year'] as DashboardMode[]).map(scale => {
-    const current = dashboardPeriod(state, scale, now);
-    return { scale, period: dashboardPeriod(state, scale, current.start - 1) };
+    const current = dashboardPeriod(dashboardState, scale, now);
+    return { scale, period: dashboardPeriod(dashboardState, scale, current.start - 1) };
   });
   const realLabel = t('Real', 'Real', 'Actual');
   const plainLabel = t('Sin nuevos bonus', 'Sense nous bonus', 'No new bonuses');
@@ -109,15 +110,15 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
         <dl className="family-breakdown">
           <div><dt>{t('Misiones', 'Missions', 'Missions')}</dt><dd className="xp-mission">{number(item.actual.mission)} Xp</dd></div>
           <div><dt>Bonus</dt><dd className="xp-bonus">{number(item.actual.bonus)} Xp</dd></div>
-          <div><dt>{t('Descubrimientos', 'Descobriments', 'Discoveries')}</dt><dd className="xp-discovery">{number(item.actual.discovery)} Xp</dd></div>
+          <div><dt>{t('Easter eggs', 'Easter eggs', 'Easter eggs')}</dt><dd className="xp-discovery">{number(item.actual.discovery)} Xp</dd></div>
           <div><dt>{t('Canjeados / reservados', 'Bescanviats / reservats', 'Spent / reserved')}</dt><dd>{number(item.actual.spent)} Xp</dd></div>
         </dl>
-        <div className="family-stat-foot"><span>{item.actual.completions} {t('misiones hechas', 'missions fetes', 'mission completions')} · {item.actual.activeDays} {t('días con actividad', 'dies amb activitat', 'active days')}</span><span>{t('Saldo disponible ahora', 'Saldo disponible ara', 'Available balance now')}<b>{number(totals(state, item.child).balance)} Xp</b></span></div>
+        <div className="family-stat-foot"><span>{item.actual.completions} {t('misiones hechas', 'missions fetes', 'mission completions')} · {item.actual.activeDays} {t('días con actividad', 'dies amb activitat', 'active days')}</span><span>{t('Saldo disponible ahora', 'Saldo disponible ara', 'Available balance now')}<b>{number(totals(dashboardState, item.child).balance)} Xp</b></span></div>
         {open && mode!=='week' && <div className="family-forecast">
           <h4>{t('Al cierre: saldo actual + lo que falta por ganar', 'En tancar: saldo actual + el que falta guanyar', 'At close: current balance + what remains to earn')}</h4>
           {item.estimate === null ? <p>{t('Aún no hay un día completo de datos para estimar.', 'Encara no hi ha un dia complet de dades per estimar.', 'A full day of history is needed for an estimate.')}</p> : <>
-            <div><span>{plainLabel}</span><strong>{number(totals(state, item.child).balance + item.estimate - item.actual.earned)} Xp</strong></div>
-            <div><span>{t('Proyección ×5 orientativa', 'Projecció ×5 orientativa', 'Indicative ×5 projection')}</span><strong>{number(totals(state, item.child).balance + item.estimateWithBonus! - item.actual.earned)} Xp</strong></div>
+            <div><span>{plainLabel}</span><strong>{number(totals(dashboardState, item.child).balance + item.estimate - item.actual.earned)} Xp</strong></div>
+            <div><span>{t('Proyección ×5 orientativa', 'Projecció ×5 orientativa', 'Indicative ×5 projection')}</span><strong>{number(totals(dashboardState, item.child).balance + item.estimateWithBonus! - item.actual.earned)} Xp</strong></div>
             <p>{t('Parte del saldo que ya tienes y suma solo lo que podrías ganar desde ahora.', 'Parteix del saldo que ja tens i suma només el que podries guanyar a partir d’ara.', 'Starts with the balance you have and adds only what you could earn from now on.')} {t('Media de misiones:', 'Mitjana de missions:', 'Mission average:')} {item.pace.daily!.toLocaleString(locale, { maximumFractionDigits: 1 })} Xp/{t('día', 'dia', 'day')} · {item.pace.days} {t('días observados', 'dies observats', 'observed days')}.{item.pace.days < 7 && <> {t('Pocos datos: úsalo solo como orientación.', 'Poques dades: només és orientatiu.', 'Limited history: use as guidance only.')}</>}</p>
           </>}
         </div>}
@@ -132,7 +133,7 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
           <small>{number(weeklyForecasts[item.child].superBaseXp)} Xp {t('de misiones ×5; sustituye los bonus ×2 ya sumados.', 'de missions ×5; substitueix els bonus ×2 ja sumats.', 'from missions ×5; replaces ×2 bonuses already counted.')}</small>
           {!weeklyForecasts[item.child].superPossible&&<p className="family-impossible-note">{t('Esta semana ya no se puede llegar al ×5.', 'Aquesta setmana ja no es pot arribar al ×5.', 'The ×5 bonus is no longer reachable this week.')}</p>}
           {weeklyForecasts[item.child].lostTaskBonus>0&&<p>{t('Bonus ×2 que ya no se pueden ganar:', 'Bonus ×2 que ja no es poden guanyar:', '×2 bonuses no longer available:')} −{number(weeklyForecasts[item.child].lostTaskBonus)} Xp</p>}
-          <p>{t('Precios orientativos con el saldo actual incluido', 'Preus orientatius amb el saldo actual inclòs', 'Suggested reward prices, including current balance')}: {t('pequeño', 'petit', 'small')} {number(totals(state,item.child).balance+weeklyForecasts[item.child].recommendation.small)} · {t('mediano', 'mitjà', 'medium')} {number(totals(state,item.child).balance+weeklyForecasts[item.child].recommendation.medium)} · {t('grande', 'gran', 'large')} {number(totals(state,item.child).balance+weeklyForecasts[item.child].recommendation.large)} Xp</p>
+          <p>{t('Precios orientativos con el saldo actual incluido', 'Preus orientatius amb el saldo actual inclòs', 'Suggested reward prices, including current balance')}: {t('pequeño', 'petit', 'small')} {number(totals(dashboardState,item.child).balance+weeklyForecasts[item.child].recommendation.small)} · {t('mediano', 'mitjà', 'medium')} {number(totals(dashboardState,item.child).balance+weeklyForecasts[item.child].recommendation.medium)} · {t('grande', 'gran', 'large')} {number(totals(dashboardState,item.child).balance+weeklyForecasts[item.child].recommendation.large)} Xp</p>
         </div>}
       </article>)}
     </section>
@@ -158,10 +159,10 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
           })}
         </LineChart></ResponsiveContainer></div>
       </>}
-      {open && <details className="family-method"><summary>{t('Cómo leer las previsiones', 'Com llegir les previsions', 'Reading the forecasts')}</summary><p>{t('El saldo al cierre parte del saldo disponible ahora y suma solo lo que falta ganar. La media usa hasta 28 días completos, incluidos los días sin actividad; no anticipa descubrimientos ni canjes futuros. Las cifras de bonus semanal son cálculos exactos según las misiones y los días que quedan.', 'El saldo en tancar parteix del saldo disponible ara i suma només el que falta guanyar. La mitjana usa fins a 28 dies complets, inclosos els dies sense activitat; no anticipa descobriments ni bescanvis futurs. Les xifres de bonus setmanal són càlculs exactes segons les missions i els dies que queden.', 'The closing balance starts with the current available balance and adds only what remains to earn. The pace uses up to 28 full days, including inactive days; it does not forecast discoveries or future redemptions. Weekly bonus figures are calculated from missions and remaining assigned days.')}</p></details>}
+      {open && <details className="family-method"><summary>{t('Cómo leer las previsiones', 'Com llegir les previsions', 'Reading the forecasts')}</summary><p>{t('El saldo al cierre parte del saldo disponible ahora y suma solo lo que falta ganar. La media usa hasta 28 días completos, incluidos los días sin actividad; no anticipa Easter eggs ni canjes futuros. Las cifras de bonus semanal son cálculos exactos según las misiones y los días que quedan.', 'El saldo en tancar parteix del saldo disponible ara i suma només el que falta guanyar. La mitjana usa fins a 28 dies complets, inclosos els dies sense activitat; no anticipa Easter eggs ni bescanvis futurs. Les xifres de bonus setmanal són càlculs exactes segons les missions i els dies que queden.', 'The closing balance starts with the current available balance and adds only what remains to earn. The pace uses up to 28 full days, including inactive days; it does not forecast Easter eggs or future redemptions. Weekly bonus figures are calculated from missions and remaining assigned days.')}</p></details>}
     </section>
     <section className="panel family-closing-panel"><h2><CalendarDays size={21}/>{t('Últimos cierres', 'Últims tancaments', 'Recent closed periods')}</h2><p>{t('Abre un cierre para revisar su detalle. Las cifras incluyen las correcciones posteriores.', 'Obre un tancament per revisar-ne el detall. Les xifres inclouen les correccions posteriors.', 'Open a closed period to review it. Figures include later corrections.')}</p><div className="family-closing-grid">
-      {recent.map(item => <button key={item.scale} onClick={() => { setMode(item.scale); setAnchor(item.period.start); }}><strong>{modeNames[item.scale]} <ChevronRight size={16}/></strong><small>{periodLabel(item.period, item.scale)}</small>{visible.map(child => <span key={child} style={style(child)}><i/>{memberName(state, child)}<b>{number(dashboardSummary(state, child, item.period).earned)} Xp</b></span>)}</button>)}
+      {recent.map(item => <button key={item.scale} onClick={() => { setMode(item.scale); setAnchor(item.period.start); }}><strong>{modeNames[item.scale]} <ChevronRight size={16}/></strong><small>{periodLabel(item.period, item.scale)}</small>{visible.map(child => <span key={child} style={style(child)}><i/>{memberName(state, child)}<b>{number(dashboardSummary(dashboardState, child, item.period).earned)} Xp</b></span>)}</button>)}
     </div></section>
   </div>;
 }

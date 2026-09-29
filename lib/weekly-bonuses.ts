@@ -20,7 +20,7 @@ export function excusalForDay(state: State, taskId: string, child: Child, day: s
 function taskResult(state: State, task: Task, child: Child, week: string, startsOn = week) {
   const plan = state.weeklyPlans?.find(item => item.week === week);
   const taskStart = plan?.taskStartsOn?.[task.id];
-  if (task.cadence === 'weekly' && excusalForDay(state, task.id, child, week)) return { expected: 0, complete: false, baseXp: 0 };
+  if (task.cadence === 'weekly' && excusalForDay(state, task.id, child, week)?.scope === 'week') return { expected: 0, complete: false, baseXp: 0 };
   const dates = Array.from({ length: 7 }, (_, index) => addDays(week, index))
     .filter(day => day >= startsOn && (!taskStart || day >= taskStart) && task.days.includes(dayOfWeek(day)) && !paused(state, child, day) && !excusalForDay(state, task.id, child, day));
   if (!dates.length) return { expected: 0, complete: false, baseXp: 0 };
