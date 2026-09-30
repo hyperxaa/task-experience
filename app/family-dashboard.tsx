@@ -81,6 +81,21 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const x2Label = t('Con bonus ×2', 'Amb bonus ×2', 'With ×2 bonuses');
   const bonusLabel = t('Con superbonus ×5', 'Amb superbonus ×5', 'With ×5 super bonus');
   const hasForecast = (child: Child, estimate: number | null) => estimate !== null || (mode === 'week' && weeklyChartCompatible && !!weeklyForecasts[child]);
+  // Keep one Xp scale for the whole period, even when a child's lines are hidden.
+  const chartKeys = model.childrenData.flatMap(({ child, estimate }) => [
+    `${child}Actual`,
+    ...(open && showForecast && hasForecast(child, estimate) ? [
+      `${child}NoBonus`,
+      ...(weeklyChartCompatible ? [`${child}X2`] : []),
+      ...(mode !== 'week' || weeklyForecasts[child]?.superPossible ? [`${child}WithBonus`] : []),
+    ] : []),
+  ]);
+  let chartMax = 0;
+  for (const point of series) for (const key of chartKeys) {
+    const value = point[key];
+    if (typeof value === 'number' && Number.isFinite(value)) chartMax = Math.max(chartMax, value);
+  }
+  const chartCeiling = Math.max(10, Math.ceil(chartMax * 1.05));
   const seriesKey = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => JSON.stringify([child, kind]);
   const isSeriesVisible = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => !hiddenSeries.includes(seriesKey(child, kind));
   const toggleSeries = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => {
@@ -158,7 +173,7 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
         <div className="family-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 22, right: 24, left: 0, bottom: 8 }} accessibilityLayer>
           <CartesianGrid stroke="#ffffff12" vertical={false}/>
           <XAxis dataKey="at" type="number" domain={[period.start, period.end]} ticks={ticks} tickFormatter={tickLabel} tick={{ fill: '#bac7d8', fontSize: 12 }} minTickGap={28} axisLine={false} tickLine={false}/>
-          <YAxis tickFormatter={number} tick={{ fill: '#bac7d8', fontSize: 12 }} axisLine={false} tickLine={false} width={64} allowDecimals={false} domain={[0, 'auto']}/>
+          <YAxis tickFormatter={number} tick={{ fill: '#bac7d8', fontSize: 12 }} axisLine={false} tickLine={false} width={64} allowDecimals={false} domain={[0, chartCeiling]} allowDataOverflow/>
           <Tooltip contentStyle={{ background: '#171e2b', border: '1px solid #526078', borderRadius: 12, color: '#f2f5fa', fontSize: 13 }} labelFormatter={value => format(Number(value), { dateStyle: 'medium', timeStyle: 'short' })} formatter={(value, name) => [number(Number(value ?? 0)) + ' Xp', String(name)]}/>
           {open && <ReferenceLine x={now} stroke="#abb8ce" strokeDasharray="3 4" label={{ value: t('Ahora', 'Ara', 'Now'), position: 'top', fill: '#bac7d8', fontSize: 11 }}/>}
           {stats.flatMap(item => {
