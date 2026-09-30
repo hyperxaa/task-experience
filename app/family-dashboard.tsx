@@ -21,6 +21,7 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const [mode, setMode] = useState<DashboardMode>('week');
   const [anchor, setAnchor] = useState(() => Date.now());
   const [hidden, setHidden] = useState<Child[]>([]);
+  const [hiddenSeries, setHiddenSeries] = useState<string[]>([]);
   const [showForecast, setShowForecast] = useState(true);
   const t = (es: string, ca: string, en: string) => lang === 'ca' ? ca : lang === 'en' ? en : es;
   const locale = lang === 'ca' ? 'ca-ES' : lang === 'en' ? 'en-GB' : 'es-ES';
@@ -80,6 +81,12 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const x2Label = t('Con bonus ×2', 'Amb bonus ×2', 'With ×2 bonuses');
   const bonusLabel = t('Con superbonus ×5', 'Amb superbonus ×5', 'With ×5 super bonus');
   const hasForecast = (child: Child, estimate: number | null) => estimate !== null || (mode === 'week' && weeklyChartCompatible && !!weeklyForecasts[child]);
+  const seriesKey = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => JSON.stringify([child, kind]);
+  const isSeriesVisible = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => !hiddenSeries.includes(seriesKey(child, kind));
+  const toggleSeries = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => {
+    const key = seriesKey(child, kind);
+    setHiddenSeries(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]);
+  };
   const balancePair = (current: number, ceiling: number) => <>{number(current)} <i>Xp</i><span className="family-week-ceiling">/ {number(ceiling)} Xp</span></>;
 
   return <div className="family-dashboard">
@@ -140,9 +147,6 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     <section className="panel family-chart-panel">
       <div className="family-chart-heading"><div><h2><Trophy size={21}/>{t('Cómo crecen los Xp', 'Com creixen els Xp', 'How Xp grows')}</h2><p>{t('Acumulados desde el inicio del periodo. Los canjes no restan en esta gráfica.', 'Acumulats des de l’inici del període. Els bescanvis no resten en aquesta gràfica.', 'Cumulative earnings since this period began. Redemptions do not reduce this chart.')}</p></div>{open && <button className="family-forecast-toggle" aria-pressed={showForecast} onClick={() => setShowForecast(value => !value)}>{showForecast ? t('Ocultar previsiones', 'Amagar previsions', 'Hide forecasts') : t('Mostrar previsiones', 'Mostrar previsions', 'Show forecasts')}</button>}</div>
       {!visible.length ? <p className="family-empty">{t('Activa al menos una persona para ver sus datos.', 'Activa almenys una persona per veure les seves dades.', 'Select at least one child to see their data.')}</p> : <>
-        <div className="family-chart-legend" aria-label={t('Leyenda de líneas', 'Llegenda de línies', 'Line legend')}>
-          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}><strong>{memberName(state, item.child)}</strong><span><LineSample/>{realLabel}</span>{open && showForecast && hasForecast(item.child, item.estimate) && <><span><LineSample dash="12 8"/>{plainLabel}</span>{weeklyChartCompatible&&<span><LineSample dash="7 5"/>{x2Label}</span>}{(mode==='week' ? weeklyForecasts[item.child]?.superPossible : true)&&<span><LineSample dash="2 6"/>{bonusLabel}</span>}</>}</div>)}
-        </div>
         <div className="family-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 22, right: 24, left: 0, bottom: 8 }} accessibilityLayer>
           <CartesianGrid stroke="#ffffff12" vertical={false}/>
           <XAxis dataKey="at" type="number" domain={[period.start, period.end]} ticks={ticks} tickFormatter={tickLabel} tick={{ fill: '#bac7d8', fontSize: 12 }} minTickGap={28} axisLine={false} tickLine={false}/>
@@ -151,13 +155,26 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
           {open && <ReferenceLine x={now} stroke="#abb8ce" strokeDasharray="3 4" label={{ value: t('Ahora', 'Ara', 'Now'), position: 'top', fill: '#bac7d8', fontSize: 11 }}/>}
           {stats.flatMap(item => {
             const child = item.child, name = memberName(state, child);
-            return [<Line key={child + '-actual'} type="linear" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>, ...(open && showForecast && hasForecast(child, item.estimate) ? [
-              <Line key={child + '-plain'} type="linear" dataKey={child + 'NoBonus'} name={name + ' · ' + plainLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="12 8" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>,
-              ...(weeklyChartCompatible ? [<Line key={child + '-x2'} type="linear" dataKey={child + 'X2'} name={name + ' · ' + x2Label} stroke={color(child)} strokeWidth={2.5} strokeDasharray="7 5" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
-              ...(mode==='week' ? (weeklyForecasts[child]?.superPossible ? [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []) : [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>]),
-            ] : [])];
+            return [
+              ...(isSeriesVisible(child, 'actual') ? [<Line key={child + '-actual'} type="linear" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+              ...(open && showForecast && hasForecast(child, item.estimate) ? [
+                ...(isSeriesVisible(child, 'plain') ? [<Line key={child + '-plain'} type="linear" dataKey={child + 'NoBonus'} name={name + ' · ' + plainLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="12 8" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+                ...(weeklyChartCompatible && isSeriesVisible(child, 'x2') ? [<Line key={child + '-x2'} type="linear" dataKey={child + 'X2'} name={name + ' · ' + x2Label} stroke={color(child)} strokeWidth={2.5} strokeDasharray="7 5" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+                ...((mode !== 'week' || weeklyForecasts[child]?.superPossible) && isSeriesVisible(child, 'bonus') ? [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+              ] : []),
+            ];
           })}
         </LineChart></ResponsiveContainer></div>
+        <div className="family-chart-legend" aria-label={t('Leyenda de líneas', 'Llegenda de línies', 'Line legend')}>
+          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}><strong>{memberName(state, item.child)}</strong>
+            <button type="button" className={!isSeriesVisible(item.child, 'actual') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'actual')} onClick={() => toggleSeries(item.child, 'actual')}><LineSample/>{realLabel}</button>
+            {open && showForecast && hasForecast(item.child, item.estimate) && <>
+              <button type="button" className={!isSeriesVisible(item.child, 'plain') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'plain')} onClick={() => toggleSeries(item.child, 'plain')}><LineSample dash="12 8"/>{plainLabel}</button>
+              {weeklyChartCompatible && <button type="button" className={!isSeriesVisible(item.child, 'x2') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'x2')} onClick={() => toggleSeries(item.child, 'x2')}><LineSample dash="7 5"/>{x2Label}</button>}
+              {(mode !== 'week' || weeklyForecasts[item.child]?.superPossible) && <button type="button" className={!isSeriesVisible(item.child, 'bonus') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'bonus')} onClick={() => toggleSeries(item.child, 'bonus')}><LineSample dash="2 6"/>{bonusLabel}</button>}
+            </>}
+          </div>)}
+        </div>
       </>}
       {open && <details className="family-method"><summary>{t('Cómo leer las previsiones', 'Com llegir les previsions', 'Reading the forecasts')}</summary><p>{t('El saldo al cierre parte del saldo disponible ahora y suma solo lo que falta ganar. La media usa hasta 28 días completos, incluidos los días sin actividad; no anticipa Easter eggs ni canjes futuros. Las cifras de bonus semanal son cálculos exactos según las misiones y los días que quedan.', 'El saldo en tancar parteix del saldo disponible ara i suma només el que falta guanyar. La mitjana usa fins a 28 dies complets, inclosos els dies sense activitat; no anticipa Easter eggs ni bescanvis futurs. Les xifres de bonus setmanal són càlculs exactes segons les missions i els dies que queden.', 'The closing balance starts with the current available balance and adds only what remains to earn. The pace uses up to 28 full days, including inactive days; it does not forecast Easter eggs or future redemptions. Weekly bonus figures are calculated from missions and remaining assigned days.')}</p></details>}
     </section>
