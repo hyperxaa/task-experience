@@ -107,10 +107,14 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     : ticks;
   const chartSpan = chartView.xEnd - chartView.xStart;
   const chartTickLabel = (at: number) => {
+    if (mode === 'week') {
+      const label = tickLabel(at);
+      return chartTicks.some(tick => tick < at && tickLabel(tick) === label) ? '' : label;
+    }
     if (mode === 'year') {
       if (!zoomed || chartSpan >= 45 * 86_400_000) return tickLabel(at);
       if (chartSpan >= 2 * 86_400_000) return format(at, { day: 'numeric', month: 'short' });
-    } else if (mode === 'week' && (!zoomed || chartSpan >= 2 * 86_400_000)) return tickLabel(at);
+    }
     if (mode !== 'day' && chartSpan < 10 * 86_400_000)
       return format(at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     return tickLabel(at);
