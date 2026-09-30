@@ -1,13 +1,14 @@
 'use client';
 import { useMemo, useState, type CSSProperties } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CalendarDays, ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, RotateCcw, Trophy, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { dateInMadrid, totals, type Child, type Lang, type State } from '@/lib/domain';
 import { childrenOf, memberName } from '@/lib/family';
 import { dashboardModel, dashboardPeriod, dashboardSummary, weeklyEarningForecast, type DashboardMode, type DashboardPeriod } from '@/lib/family-dashboard';
 import { bonusWeek } from '@/lib/weekly-bonuses';
 import { addDays, madridInstant } from '@/lib/cycles';
+import { useChartZoom } from './use-chart-zoom';
 import './family-dashboard.css';
 
 const colors = ['#55c9b7', '#c08be8', '#83a9dd', '#e7ba68', '#e88d9a', '#7fc67a', '#e8945d', '#72b6c9'];
@@ -96,6 +97,15 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     if (typeof value === 'number' && Number.isFinite(value)) chartMax = Math.max(chartMax, value);
   }
   const chartCeiling = Math.max(10, Math.ceil(chartMax * 1.05));
+  const { chartRef, view: chartView, zoomed, zoomBy, reset, onMouseDown, onMouseMove, onMouseUp } = useChartZoom(
+    { start: period.start, end: period.end, ceiling: chartCeiling }, mode, visible.length > 0,
+  );
+  const chartTicks = zoomed
+    ? Array.from({ length: 5 }, (_, index) => chartView.xStart + (chartView.xEnd - chartView.xStart) * index / 4)
+    : ticks;
+  const chartTickLabel = (at: number) => mode !== 'day' && chartView.xEnd - chartView.xStart < 10 * 86_400_000
+    ? format(at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : tickLabel(at);
   const seriesKey = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => JSON.stringify([child, kind]);
   const isSeriesVisible = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => !hiddenSeries.includes(seriesKey(child, kind));
   const toggleSeries = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => {
@@ -168,12 +178,12 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
       </article>)}
     </section>
     <section className="panel family-chart-panel">
-      <div className="family-chart-heading"><div><h2><Trophy size={21}/>{t('Cómo crecen los Xp', 'Com creixen els Xp', 'How Xp grows')}</h2><p>{t('Acumulados desde el inicio del periodo. Los canjes no restan en esta gráfica.', 'Acumulats des de l’inici del període. Els bescanvis no resten en aquesta gràfica.', 'Cumulative earnings since this period began. Redemptions do not reduce this chart.')}</p></div>{open && <button className="family-forecast-toggle" aria-pressed={showForecast} onClick={() => setShowForecast(value => !value)}>{showForecast ? t('Ocultar previsiones', 'Amagar previsions', 'Hide forecasts') : t('Mostrar previsiones', 'Mostrar previsions', 'Show forecasts')}</button>}</div>
+      <div className="family-chart-heading"><div><h2><Trophy size={21}/>{t('Cómo crecen los Xp', 'Com creixen els Xp', 'How Xp grows')}</h2><p>{t('Acumulados desde el inicio del periodo. Los canjes no restan en esta gráfica.', 'Acumulats des de l’inici del període. Els bescanvis no resten en aquesta gràfica.', 'Cumulative earnings since this period began. Redemptions do not reduce this chart.')}</p></div><div className="family-chart-actions">{open && <button type="button" className="family-forecast-toggle" aria-pressed={showForecast} onClick={() => setShowForecast(value => !value)}>{showForecast ? t('Ocultar previsiones', 'Amagar previsions', 'Hide forecasts') : t('Mostrar previsiones', 'Mostrar previsions', 'Show forecasts')}</button>}<div className="family-chart-zoom-controls" role="group" aria-label={t('Zoom de la gráfica', 'Zoom de la gràfica', 'Chart zoom')}><button type="button" aria-label={t('Ampliar gráfica', 'Ampliar gràfica', 'Zoom in')} disabled={!visible.length} onClick={() => zoomBy(.75)}><ZoomIn size={17}/></button><button type="button" aria-label={t('Reducir gráfica', 'Reduir gràfica', 'Zoom out')} disabled={!zoomed || !visible.length} onClick={() => zoomBy(1.35)}><ZoomOut size={17}/></button><button type="button" disabled={!zoomed} onClick={reset}><RotateCcw size={15}/>{t('Ver todo', 'Veure-ho tot', 'Show all')}</button></div></div></div>
       {!visible.length ? <p className="family-empty">{t('Activa al menos una persona para ver sus datos.', 'Activa almenys una persona per veure les seves dades.', 'Select at least one child to see their data.')}</p> : <>
-        <div className="family-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 22, right: 24, left: 0, bottom: 8 }} accessibilityLayer>
+        <div className={`family-chart${zoomed ? ' zoomed' : ''}`} ref={chartRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 22, right: 24, left: 0, bottom: 8 }} accessibilityLayer>
           <CartesianGrid stroke="#ffffff12" vertical={false}/>
-          <XAxis dataKey="at" type="number" domain={[period.start, period.end]} ticks={ticks} tickFormatter={tickLabel} tick={{ fill: '#bac7d8', fontSize: 12 }} minTickGap={28} axisLine={false} tickLine={false}/>
-          <YAxis tickFormatter={number} tick={{ fill: '#bac7d8', fontSize: 12 }} axisLine={false} tickLine={false} width={64} allowDecimals={false} domain={[0, chartCeiling]} allowDataOverflow/>
+          <XAxis dataKey="at" type="number" domain={[chartView.xStart, chartView.xEnd]} allowDataOverflow ticks={chartTicks} tickFormatter={chartTickLabel} tick={{ fill: '#bac7d8', fontSize: 12 }} minTickGap={28} axisLine={false} tickLine={false}/>
+          <YAxis tickFormatter={number} tick={{ fill: '#bac7d8', fontSize: 12 }} axisLine={false} tickLine={false} width={64} allowDecimals={false} domain={[chartView.yStart, chartView.yEnd]} allowDataOverflow/>
           <Tooltip contentStyle={{ background: '#171e2b', border: '1px solid #526078', borderRadius: 12, color: '#f2f5fa', fontSize: 13 }} labelFormatter={value => format(Number(value), { dateStyle: 'medium', timeStyle: 'short' })} formatter={(value, name) => [number(Number(value ?? 0)) + ' Xp', String(name)]}/>
           {open && <ReferenceLine x={now} stroke="#abb8ce" strokeDasharray="3 4" label={{ value: t('Ahora', 'Ara', 'Now'), position: 'top', fill: '#bac7d8', fontSize: 11 }}/>}
           {stats.flatMap(item => {
@@ -188,6 +198,9 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
             ];
           })}
         </LineChart></ResponsiveContainer></div>
+        <p className="family-chart-zoom-hint">{zoomed
+          ? t('Arrastra para mover · rueda o pellizca para ajustar el zoom.', 'Arrossega per moure · roda o pessiga per ajustar el zoom.', 'Drag to move · use the wheel or pinch to adjust zoom.')
+          : t('Rueda del ratón o pellizco con dos dedos para ampliar.', 'Roda del ratolí o pessic amb dos dits per ampliar.', 'Mouse wheel or two-finger pinch to zoom.')}</p>
         <div className="family-chart-legend" aria-label={t('Leyenda de líneas', 'Llegenda de línies', 'Line legend')}>
           {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}>
             <button type="button" className={`family-legend-child-toggle${!isChildChartVisible(item.child) ? ' inactive' : ''}`} aria-pressed={isChildChartVisible(item.child)} onClick={() => toggleChildChart(item.child)}><LineSample/>{memberName(state, item.child)}</button>
