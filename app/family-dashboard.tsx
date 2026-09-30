@@ -66,13 +66,15 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     if (scale === 'day') return format(value.start, { day: 'numeric', month: 'long', year: 'numeric' });
     if (scale === 'month') return format(value.start, { month: 'long', year: 'numeric' });
     if (scale === 'year') return format(value.start, { year: 'numeric' });
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
-    return format(value.start, options) + ' → ' + format(value.end, { ...options, year: 'numeric' });
+    return format(value.start, { day: 'numeric', month: 'short' }) + ' → '
+      + format(value.end, { day: 'numeric', month: 'short', year: 'numeric' });
   };
   const tickLabel = (at: number) => mode === 'day'
     ? at === period.end ? '24:00' : format(at, { hour: '2-digit', minute: '2-digit' })
-    : format(at, { day: 'numeric', month: 'short' });
-  const ticks = series.filter((point, index) => point.at !== now && (index === 0 || index === series.length - 1 || (mode === 'day' ? index % 3 === 0 : mode === 'week' ? true : mode === 'month' ? index % 5 === 0 : new Date(Number(point.at)).toLocaleString('en-CA', { day: '2-digit', timeZone: 'Europe/Madrid' }) === '01'))).map(point => Number(point.at));
+    : mode === 'year' ? format(at, { month: 'short' }) : format(at, { day: 'numeric', month: 'short' });
+  const ticks = series.filter((point, index) => point.at !== now && (mode === 'year'
+    ? Number(point.at) < period.end && new Date(Number(point.at)).toLocaleString('en-CA', { day: '2-digit', timeZone: 'Europe/Madrid' }) === '01'
+    : index === 0 || index === series.length - 1 || (mode === 'day' ? index % 3 === 0 : mode === 'week' ? true : index % 5 === 0))).map(point => Number(point.at));
   const recent = (['day', 'week', 'month', 'year'] as DashboardMode[]).map(scale => {
     const current = dashboardPeriod(dashboardState, scale, now);
     return { scale, period: dashboardPeriod(dashboardState, scale, current.start - 1) };
@@ -103,9 +105,16 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const chartTicks = zoomed
     ? Array.from({ length: 5 }, (_, index) => chartView.xStart + (chartView.xEnd - chartView.xStart) * index / 4)
     : ticks;
-  const chartTickLabel = (at: number) => mode !== 'day' && chartView.xEnd - chartView.xStart < 10 * 86_400_000
-    ? format(at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : tickLabel(at);
+  const chartSpan = chartView.xEnd - chartView.xStart;
+  const chartTickLabel = (at: number) => {
+    if (mode === 'year') {
+      if (!zoomed || chartSpan >= 45 * 86_400_000) return tickLabel(at);
+      if (chartSpan >= 2 * 86_400_000) return format(at, { day: 'numeric', month: 'short' });
+    } else if (mode === 'week' && (!zoomed || chartSpan >= 2 * 86_400_000)) return tickLabel(at);
+    if (mode !== 'day' && chartSpan < 10 * 86_400_000)
+      return format(at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return tickLabel(at);
+  };
   const seriesKey = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => JSON.stringify([child, kind]);
   const isSeriesVisible = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => !hiddenSeries.includes(seriesKey(child, kind));
   const toggleSeries = (child: Child, kind: 'actual' | 'plain' | 'x2' | 'bonus') => {
