@@ -87,6 +87,14 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
     const key = seriesKey(child, kind);
     setHiddenSeries(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]);
   };
+  const isChildChartVisible = (child: Child) => !(['actual', 'plain', 'x2', 'bonus'] as const).every(kind => !isSeriesVisible(child, kind));
+  const toggleChildChart = (child: Child) => {
+    const keys = (['actual', 'plain', 'x2', 'bonus'] as const).map(kind => seriesKey(child, kind));
+    setHiddenSeries(current => {
+      const visible = keys.some(key => !current.includes(key));
+      return visible ? [...new Set([...current, ...keys])] : current.filter(key => !keys.includes(key));
+    });
+  };
   const balancePair = (current: number, ceiling: number) => <>{number(current)} <i>Xp</i><span className="family-week-ceiling">/ {number(ceiling)} Xp</span></>;
 
   return <div className="family-dashboard">
@@ -156,17 +164,18 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
           {stats.flatMap(item => {
             const child = item.child, name = memberName(state, child);
             return [
-              ...(isSeriesVisible(child, 'actual') ? [<Line key={child + '-actual'} type="linear" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+              ...(isSeriesVisible(child, 'actual') ? [<Line key={child + '-actual'} type="monotone" dataKey={child + 'Actual'} name={name + ' · ' + realLabel} stroke={color(child)} strokeWidth={3} dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
               ...(open && showForecast && hasForecast(child, item.estimate) ? [
-                ...(isSeriesVisible(child, 'plain') ? [<Line key={child + '-plain'} type="linear" dataKey={child + 'NoBonus'} name={name + ' · ' + plainLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="12 8" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
-                ...(weeklyChartCompatible && isSeriesVisible(child, 'x2') ? [<Line key={child + '-x2'} type="linear" dataKey={child + 'X2'} name={name + ' · ' + x2Label} stroke={color(child)} strokeWidth={2.5} strokeDasharray="7 5" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
-                ...((mode !== 'week' || weeklyForecasts[child]?.superPossible) && isSeriesVisible(child, 'bonus') ? [<Line key={child + '-bonus'} type="linear" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+                ...(isSeriesVisible(child, 'plain') ? [<Line key={child + '-plain'} type="monotone" dataKey={child + 'NoBonus'} name={name + ' · ' + plainLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="12 8" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+                ...(weeklyChartCompatible && isSeriesVisible(child, 'x2') ? [<Line key={child + '-x2'} type="monotone" dataKey={child + 'X2'} name={name + ' · ' + x2Label} stroke={color(child)} strokeWidth={2.5} strokeDasharray="7 5" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
+                ...((mode !== 'week' || weeklyForecasts[child]?.superPossible) && isSeriesVisible(child, 'bonus') ? [<Line key={child + '-bonus'} type="monotone" dataKey={child + 'WithBonus'} name={name + ' · ' + bonusLabel} stroke={color(child)} strokeWidth={2.5} strokeDasharray="2 6" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}/>] : []),
               ] : []),
             ];
           })}
         </LineChart></ResponsiveContainer></div>
         <div className="family-chart-legend" aria-label={t('Leyenda de líneas', 'Llegenda de línies', 'Line legend')}>
-          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}><strong>{memberName(state, item.child)}</strong>
+          {stats.map(item => <div className="family-legend-child" key={item.child} style={style(item.child)}>
+            <button type="button" className={`family-legend-child-toggle${!isChildChartVisible(item.child) ? ' inactive' : ''}`} aria-pressed={isChildChartVisible(item.child)} onClick={() => toggleChildChart(item.child)}><LineSample/>{memberName(state, item.child)}</button>
             <button type="button" className={!isSeriesVisible(item.child, 'actual') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'actual')} onClick={() => toggleSeries(item.child, 'actual')}><LineSample/>{realLabel}</button>
             {open && showForecast && hasForecast(item.child, item.estimate) && <>
               <button type="button" className={!isSeriesVisible(item.child, 'plain') ? 'inactive' : ''} aria-pressed={isSeriesVisible(item.child, 'plain')} onClick={() => toggleSeries(item.child, 'plain')}><LineSample dash="12 8"/>{plainLabel}</button>
