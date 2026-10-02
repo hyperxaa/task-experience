@@ -38,6 +38,22 @@ test('dashboard separates earnings and spending, and attributes backdated entrie
   assert.deepEqual(summary, { earned: 28, mission: 5, discovery: 3, bonus: 20, completions: 1, activeDays: 1, spent: 10 });
 });
 
+test('the real chart changes at each Xp event and keeps calendar ticks stable', () => {
+  const state = fixture();
+  const day = '2026-09-21';
+  const now = at(day, '16:00');
+  state.completions.push(completion(day, 5, '10:15'), completion(day, 3, '14:15'));
+  const model = dashboardModel(state, ['aina'], 'day', now, now);
+  assert.equal(model.series.find(point => point.at === at(day, '10:15')).ainaActual, 0);
+  assert.equal(model.series.find(point => point.at === at(day, '10:15') + 1).ainaActual, 5);
+  assert.equal(model.series.find(point => point.at === at(day, '14:15') + 1).ainaActual, 8);
+  assert.equal(model.series.find(point => point.at === now).ainaActual, model.childrenData[0].actual.earned);
+  assert.equal(model.axisTimes.includes(at(day, '10:15')), false);
+  state.completions[1].xp = 0;
+  const corrected = dashboardModel(state, ['aina'], 'day', now, now);
+  assert.equal(corrected.series.find(point => point.at === now).ainaActual, 5);
+});
+
 test('current periods compare equal elapsed time, and forecast lines reach the last-hour closing point', () => {
   const state = fixture('2026-09-26');
   state.completions.push(completion('2026-09-26', 8), completion('2026-09-27', 12), completion('2026-09-27', 200, '23:59'), completion('2026-09-28', 7));

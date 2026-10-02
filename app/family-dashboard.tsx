@@ -72,9 +72,9 @@ export function FamilyDashboard({ state, lang, parent }: { state: State; lang: L
   const tickLabel = (at: number) => mode === 'day'
     ? at === period.end ? '24:00' : format(at, { hour: '2-digit', minute: '2-digit' })
     : mode === 'year' ? format(at, { month: 'short' }) : format(at, { day: 'numeric', month: 'short' });
-  const ticks = series.filter((point, index) => point.at !== now && (mode === 'year'
-    ? Number(point.at) < period.end && new Date(Number(point.at)).toLocaleString('en-CA', { day: '2-digit', timeZone: 'Europe/Madrid' }) === '01'
-    : index === 0 || index === series.length - 1 || (mode === 'day' ? index % 3 === 0 : mode === 'week' ? true : index % 5 === 0))).map(point => Number(point.at));
+  const ticks = model.axisTimes.filter((at, index) => at !== now && (mode === 'year'
+    ? at < period.end && new Date(at).toLocaleString('en-CA', { day: '2-digit', timeZone: 'Europe/Madrid' }) === '01'
+    : index === 0 || index === model.axisTimes.length - 1 || (mode === 'day' ? index % 3 === 0 : mode === 'week' ? true : index % 5 === 0)));
   const recent = (['day', 'week', 'month', 'year'] as DashboardMode[]).map(scale => {
     const current = dashboardPeriod(dashboardState, scale, now);
     return { scale, period: dashboardPeriod(dashboardState, scale, current.start - 1) };

@@ -160,9 +160,17 @@ function observedPace(state: State, child: Child, events: Event[], now: number) 
   return { days, daily: days ? recent.mission / days : null };
 }
 
-function sampleTimes(mode: DashboardMode, period: DashboardPeriod, now: number) {
+function sampleTimes(mode: DashboardMode, period: DashboardPeriod, now: number, events: Event[]) {
   const values = new Set([period.start, period.end]);
   if (now > period.start && now < period.end) values.add(now);
+  // A calendar-only series hides changes until the next day marker. Keep both
+  // sides of each earning event so the real line moves when its Xp changes.
+  for (const event of events) {
+    if (event.at >= period.start && event.at <= now && event.at < period.end) {
+      values.add(event.at);
+      if (event.at + 1 < period.end && event.at + 1 <= now) values.add(event.at + 1);
+    }
+  }
   if (mode === 'day') {
     for (let at = period.start + 3600000; at < period.end; at += 3600000) values.add(at);
   } else {
@@ -189,7 +197,9 @@ export function dashboardModel(state: State, children: Child[], mode: DashboardM
   const open = period.start <= now && now < period.end;
   const previous = dashboardPeriod(state, mode, period.start - 1);
   const comparison = { ...previous, end: open ? Math.min(previous.end, previous.start + now - period.start) : previous.end };
-  const points = sampleTimes(mode, period, now);
+  const childEvents = new Map(children.map(child => [child, eventsFor(state, child)]));
+  const axisTimes = sampleTimes(mode, period, now, []);
+  const points = sampleTimes(mode, period, now, [...childEvents.values()].flat());
   let futureDays = 0, futureAt = now;
   const forecastDays = points.map(at => {
     if (at > futureAt) { futureDays += daysBetween(futureAt, at); futureAt = at; }
@@ -197,7 +207,7 @@ export function dashboardModel(state: State, children: Child[], mode: DashboardM
   });
   const series: Array<Record<string, number | null>> = points.map(at => ({ at }));
   const childrenData = children.map(child => {
-    const events = eventsFor(state, child);
+    const events = childEvents.get(child)!;
     const actual = dashboardSummary(state, child, { start: period.start, end: Math.min(period.end, now + 1) });
     const prior = sumEvents(events, comparison);
     const pace = observedPace(state, child, events, now);
@@ -220,5 +230,5 @@ export function dashboardModel(state: State, children: Child[], mode: DashboardM
       estimate: future === null ? null : actual.earned + future,
       estimateWithBonus: future === null ? null : actual.earned + future * 5 };
   });
-  return { period, previous, comparison, open, series, childrenData };
+  return { period, previous, comparison, open, series, axisTimes, childrenData };
 }
